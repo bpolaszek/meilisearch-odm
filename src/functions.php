@@ -46,12 +46,12 @@ function resolve_filters(Expression|array $filters): array {
     }
 
     if (!array_is_list($filters)) {
-        $filter = filterBuilder();
+        $expressions = [];
         foreach ($filters as $field => $value) {
-            $filter = $filter->and(field($field)->isIn((array) $value));
+            $expressions[] = field($field)->isIn((array) $value);
         }
 
-        return [$filter];
+        return $expressions;
     }
 
     return (fn (Expression ...$expressions) => $expressions)(...$filters);
