@@ -3,11 +3,20 @@
 namespace BenTools\MeilisearchOdm\Tests\Fixtures;
 
 use BenTools\MeilisearchOdm\Attribute\AsMeiliDocument;
+use BenTools\MeilisearchOdm\Attribute\MeiliAttribute;
 
 #[AsMeiliDocument('cities', primaryKey: 'geonameid')]
 class City
 {
-    public int $geonameid;
+    #[MeiliAttribute('geonameid')]
+    public int $id;
+
+    #[MeiliAttribute]
     public string $name;
-    public string $country_code;
+
+    #[MeiliAttribute('country_code')]
+    public string $countryCode;
+
+    #[MeiliAttribute]
+    public int $population;
 }
