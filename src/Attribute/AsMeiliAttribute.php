@@ -8,10 +8,11 @@ use Attribute;
  * @codeCoverageIgnore
  */
 #[Attribute(Attribute::TARGET_PROPERTY)]
-final readonly class MeiliAttribute
+final readonly class AsMeiliAttribute
 {
     public function __construct(
-        public ?string $name = null,
+        public ?string $attributeName = null,
+        public ?MeiliRelation $relation = null,
     ) {
     }
 }

@@ -3,25 +3,25 @@
 namespace BenTools\MeilisearchOdm\Tests\Hydrater;
 
 use BenTools\MeilisearchOdm\Hydrater\Hydrater;
-use BenTools\MeilisearchOdm\Metadata\ClassMetadataRegistry;
-use BenTools\MeilisearchOdm\Tests\Fixtures\City;
+use BenTools\MeilisearchOdm\Manager\ObjectManager;
+use BenTools\MeilisearchOdm\Tests\Fixtures\Country;
 
-it('should hydrate an object', function () {
+it('hydrates an object', function () {
     $data = [
-        'geonameid' => '1234',
-        'name' => 'Paris',
-        'country_code' => 'FR',
-        'population' => 2_138_551,
+        'cca2' => 'AE',
+        'name' => [
+            'common' => 'United Arab Emirates',
+        ],
+        'region' => 'Asia',
     ];
 
-    $city = new City();
-    $hydrater = new Hydrater();
-    $registry = new ClassMetadataRegistry();
+    $objectManager = new ObjectManager();
+    $hydrater = new Hydrater($objectManager);
 
-    $hydrater->hydrate($data, $city, $registry->getClassMetadata(City::class));
+    $country = $hydrater->hydrate($data, new Country(), $objectManager->classMetadataRegistry->getClassMetadata(Country::class));
 
-    expect($city->id)->toBe(1234)
-        ->and($city->name)->toBe('Paris')
-        ->and($city->countryCode)->toBe('FR')
-        ->and($city->population)->toBe(2_138_551);
+    expect($country)->toBeInstanceOf(Country::class)
+        ->and($country->id)->toBe('AE')
+        ->and($country->name)->toBe('United Arab Emirates')
+        ->and($country->region)->toBe('Asia');
 });

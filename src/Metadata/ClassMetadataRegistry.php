@@ -4,7 +4,7 @@ namespace BenTools\MeilisearchOdm\Metadata;
 
 use BenTools\MeilisearchOdm\Attribute\AsMeiliDocument as ClassMetadata;
 
-use BenTools\MeilisearchOdm\Attribute\MeiliAttribute;
+use BenTools\MeilisearchOdm\Attribute\AsMeiliAttribute;
 use InvalidArgumentException;
 
 use function sprintf;
@@ -29,7 +29,7 @@ final class ClassMetadataRegistry
             ))->newInstance();
 
         foreach ($classRefl->getProperties() as $propertyRefl) {
-            $meiliAttribute = ($propertyRefl->getAttributes(MeiliAttribute::class)[0] ?? null)?->newInstance();
+            $meiliAttribute = ($propertyRefl->getAttributes(AsMeiliAttribute::class)[0] ?? null)?->newInstance();
             if (null !== $meiliAttribute) {
                 $classMetadata->registerProperty($propertyRefl->getName(), $meiliAttribute);
             }

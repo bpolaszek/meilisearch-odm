@@ -3,20 +3,22 @@
 namespace BenTools\MeilisearchOdm\Tests\Fixtures;
 
 use BenTools\MeilisearchOdm\Attribute\AsMeiliDocument;
-use BenTools\MeilisearchOdm\Attribute\MeiliAttribute;
+use BenTools\MeilisearchOdm\Attribute\AsMeiliAttribute;
+use BenTools\MeilisearchOdm\Attribute\MeiliRelation;
+use BenTools\MeilisearchOdm\Attribute\MeiliRelationType;
 
 #[AsMeiliDocument('cities', primaryKey: 'geonameid')]
 class City
 {
-    #[MeiliAttribute('geonameid')]
+    #[AsMeiliAttribute('geonameid')]
     public int $id;
 
-    #[MeiliAttribute]
+    #[AsMeiliAttribute]
     public string $name;
 
-    #[MeiliAttribute('country_code')]
-    public string $countryCode;
+    #[AsMeiliAttribute('country code', relation: new MeiliRelation(Country::class, MeiliRelationType::ONE_TO_ONE))]
+    public Country $country;
 
-    #[MeiliAttribute]
+    #[AsMeiliAttribute]
     public int $population;
 }

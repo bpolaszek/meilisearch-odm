@@ -2,30 +2,47 @@
 
 namespace BenTools\MeilisearchOdm\Hydrater;
 
-use AutoMapper\AutoMapper;
-use AutoMapper\AutoMapperInterface;
 use BenTools\MeilisearchOdm\Attribute\AsMeiliDocument as ClassMetadata;
+use BenTools\MeilisearchOdm\Attribute\MeiliRelationType;
+use BenTools\MeilisearchOdm\Manager\ObjectManager;
+use Symfony\Component\PropertyAccess\PropertyAccessor;
+use Symfony\Component\PropertyAccess\PropertyAccessorInterface;
+
+use function array_map;
+use function explode;
+use function implode;
+use function sprintf;
 
 final readonly class Hydrater
 {
-    private AutoMapperInterface $autoMapper;
-
     public function __construct(
-        ?AutoMapperInterface $autoMapper = null,
+        private ObjectManager $manager,
+        private PropertyAccessorInterface $propertyAccessor = new PropertyAccessor(),
     ) {
-        $this->autoMapper = $autoMapper ?? AutoMapper::create();
     }
 
     public function hydrate(array $data, object $object, ClassMetadata $metadata): object
     {
-        $middle = [];
         foreach ($metadata->properties as $propertyName => $meiliAttribute) {
-            $attributeName = $meiliAttribute->name ?? $propertyName;
-            if (isset($data[$attributeName])) {
-                $middle[$propertyName] = $data[$attributeName];
-            }
+            $attributeName = $meiliAttribute->attributeName ?? $propertyName;
+            $propertyPath = $this->normalizePropertyPath($attributeName);
+            $rawValue = $this->propertyAccessor->getValue($data, $propertyPath);
+            $this->propertyAccessor->setValue($object, $propertyName, match ($meiliAttribute->relation?->type) {
+                MeiliRelationType::ONE_TO_ONE => $this->fetchOneToOneRelation($meiliAttribute->relation->targetClass, $rawValue),
+                default => $rawValue,
+            });
         }
 
-        return $this->autoMapper->map($middle, $object);
+        return $object;
+    }
+
+    private function fetchOneToOneRelation(string $targetClass, mixed $id): ?object
+    {
+        return $this->manager->getRepository($targetClass)->find($id);
+    }
+
+    private function normalizePropertyPath(string $propertyPath): string
+    {
+        return implode('', array_map(fn (string $segment) => sprintf('[%s]', $segment), explode('.', $propertyPath)));
     }
 }

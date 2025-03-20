@@ -11,7 +11,7 @@ use Attribute;
 final class AsMeiliDocument
 {
     /**
-     * @var MeiliAttribute[]
+     * @var AsMeiliAttribute[]
      */
     public array $properties = [];
 
@@ -21,7 +21,7 @@ final class AsMeiliDocument
     ) {
     }
 
-    public function registerProperty(string $propertyName, MeiliAttribute $attribute): void
+    public function registerProperty(string $propertyName, AsMeiliAttribute $attribute): void
     {
         $this->properties[$propertyName] = $attribute;
     }

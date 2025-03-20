@@ -3,10 +3,9 @@
   "description": "Meilisearch Object Document Mapper",
   "type": "library",
   "require": {
-    "php": "^8.2",
+    "php": "^8.4",
     "bentools/iterable-functions": "^2.3",
     "bentools/meilisearch-filters": "^1.0",
-    "jolicode/automapper": "^9.3",
     "meilisearch/meilisearch-php": "~1.13",
     "symfony/options-resolver": "~5.0|~6.0|~7.0",
     "symfony/property-access": "~5.0|~6.0|~7.0",
