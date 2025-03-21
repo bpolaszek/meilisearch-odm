@@ -23,11 +23,7 @@ describe('Hydrater', function () {
         $objectManager = new ObjectManager();
         $hydrater = new Hydrater($objectManager);
 
-        $country = $hydrater->hydrateObjectFromDocument(
-            $data,
-            new Country(),
-            $objectManager->classMetadataRegistry->getClassMetadata(Country::class),
-        );
+        $country = $hydrater->hydrateObjectFromDocument($data, new Country());
 
         expect($country)->toBeInstanceOf(Country::class)
             ->and($country->id)->toBe('AE')

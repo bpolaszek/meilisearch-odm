@@ -2,6 +2,7 @@
 
 namespace BenTools\MeilisearchOdm\Hydrater;
 
+use BenTools\MeilisearchOdm\Attribute\AsMeiliAttribute as AttributeMetadata;
 use BenTools\MeilisearchOdm\Attribute\AsMeiliDocument as ClassMetadata;
 use BenTools\MeilisearchOdm\Attribute\MeiliRelationType;
 use BenTools\MeilisearchOdm\Manager\ObjectManager;
@@ -21,42 +22,61 @@ final readonly class Hydrater
     ) {
     }
 
-    public function hydrateObjectFromDocument(array $document, object $object, ClassMetadata $metadata): object
+    public function hydrateObjectFromDocument(array $document, object $object): object
     {
+        $metadata = $this->manager->classMetadataRegistry->getClassMetadata($object::class);
         foreach ($metadata->properties as $propertyName => $meiliAttribute) {
             $attributeName = $meiliAttribute->attributeName ?? $propertyName;
             $propertyPath = $this->normalizePropertyPath($attributeName);
             $rawValue = $this->propertyAccessor->getValue($document, $propertyPath);
             $this->propertyAccessor->setValue($object, $propertyName, match ($meiliAttribute->relation?->type) {
                 MeiliRelationType::ONE_TO_ONE => $this->fetchOneToOneRelation($meiliAttribute->relation->targetClass, $rawValue),
-                default => $rawValue,
+                default => $this->hydratePropertyFromDocument($rawValue, $meiliAttribute),
             });
         }
 
         return $object;
     }
 
-    public function hydrateDocumentFromObject(object $object, ClassMetadata $metadata): array
+    public function hydrateDocumentFromObject(object $object): array
     {
+        $metadata = $this->manager->classMetadataRegistry->getClassMetadata($object::class);
         $document = [];
         foreach ($metadata->properties as $propertyName => $meiliAttribute) {
             $attributeName = $meiliAttribute->attributeName ?? $propertyName;
             $value = $this->propertyAccessor->getValue($object, $propertyName);
             $propertyPath = $this->normalizePropertyPath($attributeName);
             $this->propertyAccessor->setValue($document, $propertyPath, match ($meiliAttribute->relation?->type) {
-                MeiliRelationType::ONE_TO_ONE => $this->getIdFromObject($value, $this->manager->classMetadataRegistry->getClassMetadata($meiliAttribute->relation->targetClass)),
-                default => $value,
+                MeiliRelationType::ONE_TO_ONE => $this->getIdFromObject($value),
+                default => $this->hydrateAttributeFromObject($value, $meiliAttribute),
             });
         }
 
         return $document;
     }
 
+    private function hydratePropertyFromDocument(mixed $value, AttributeMetadata $attribute): mixed
+    {
+        if (null === $attribute->transformer) {
+            return $value;
+        }
+
+        return $attribute->transformer->toObjectProperty($value, $attribute);
+    }
+
+    private function hydrateAttributeFromObject(mixed $value, AttributeMetadata $attribute): mixed
+    {
+        if (null === $attribute->transformer) {
+            return $value;
+        }
+
+        return $attribute->transformer->toDocumentAttribute($value, $attribute);
+    }
+
     public function computeChangeset(object $object, ?array $document = null): array
     {
         $repository = $this->manager->getRepository($object::class);
-        $metadata = $this->manager->classMetadataRegistry->getClassMetadata($object::class);
-        $document ??= $this->hydrateDocumentFromObject($object, $metadata);
+        $document ??= $this->hydrateDocumentFromObject($object);
         $rememberedState = $repository->identityMap->rememberedStates[$object] ?? [];
         $changeset = [];
         foreach ($document as $attribute => $newValue) {
@@ -80,8 +100,9 @@ final readonly class Hydrater
         return $this->propertyAccessor->getValue($data, $this->normalizePropertyPath($metadata->primaryKey));
     }
 
-    public function getIdFromObject(object $object, ClassMetadata $metadata): string|int
+    public function getIdFromObject(object $object): string|int
     {
+        $metadata = $this->manager->classMetadataRegistry->getClassMetadata($object::class);
         return $this->propertyAccessor->getValue($object, $metadata->idProperty);
     }
 

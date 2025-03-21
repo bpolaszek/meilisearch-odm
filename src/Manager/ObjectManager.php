@@ -95,7 +95,7 @@ final class ObjectManager
 
             // Compute changed entities
             foreach ($repository->identityMap as $object) {
-                $document = $this->hydrater->hydrateDocumentFromObject($object, $metadata);
+                $document = $this->hydrater->hydrateDocumentFromObject($object);
                 $changeset = $this->hydrater->computeChangeset($object, $document);
                 if ([] !== $changeset) {
                     $repository->identityMap->scheduleUpsert($object);
@@ -109,9 +109,9 @@ final class ObjectManager
                 foreach (self::getDocumentsByBatches($scheduledUpserts, $flushBatchSize) as $objects) {
                     $tasks[] = $this->meili->index($metadata->indexUid)->updateDocuments(
                         iterable($objects)
-                            ->map(function (object $object) use ($objectToDocumentMap, $metadata) {
+                            ->map(function (object $object) use ($objectToDocumentMap) {
                                 return $objectToDocumentMap[$object]
-                                    ?? $this->hydrater->hydrateDocumentFromObject($object, $metadata);
+                                    ?? $this->hydrater->hydrateDocumentFromObject($object);
                             })
                             ->asArray(),
                     );
@@ -125,7 +125,7 @@ final class ObjectManager
                     $tasks[] = $this->meili->index($metadata->indexUid)->deleteDocuments([
                         'filter' => field($metadata->primaryKey)->isIn(
                             iterable($objects)
-                                ->map(fn (object $object) => $this->hydrater->getIdFromObject($object, $metadata))
+                                ->map(fn (object $object) => $this->hydrater->getIdFromObject($object))
                                 ->asArray(),
                         ),
                     ]);
