@@ -39,11 +39,17 @@ final class ClassMetadataRegistry
         $classMetadata->className = $className;
 
         foreach ($classRefl->getProperties() as $propertyRefl) {
+            /** @var AsMeiliAttribute $meiliAttribute */
             $meiliAttribute = ($propertyRefl->getAttributes(AsMeiliAttribute::class)[0] ?? null)?->newInstance();
             if (null !== $meiliAttribute) {
                 $classMetadata->registerProperty($propertyRefl->getName(), $meiliAttribute);
+                if ($meiliAttribute->attributeName === $classMetadata->primaryKey) {
+                    $classMetadata->idProperty = $propertyRefl->getName();
+                }
             }
         }
+
+        $classMetadata->idProperty ??= throw self::noPrimaryKeyMapException($className, $classMetadata);
 
         return $classMetadata;
     }
@@ -61,6 +67,16 @@ final class ClassMetadataRegistry
     {
         return new InvalidArgumentException(
             sprintf("Class %s is not registered as a Meili Document.", $className),
+        );
+    }
+
+    /**
+     * @codeCoverageIgnore
+     */
+    private static function noPrimaryKeyMapException(string $className, ClassMetadata $metadata): InvalidArgumentException
+    {
+        return new InvalidArgumentException(
+            sprintf("Class %s has no property map to primary key %s.", $className, $metadata->primaryKey),
         );
     }
 }

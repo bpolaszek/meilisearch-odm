@@ -20,7 +20,7 @@ use const PHP_INT_MAX;
  */
 final readonly class ObjectRepository
 {
-    private IdentityMap $identityMap;
+    public IdentityMap $identityMap;
 
     public function __construct(
         private ObjectManager $objectManager,
@@ -81,11 +81,16 @@ final readonly class ObjectRepository
         return [...$hits][0] ?? null;
     }
 
+    public function clear(): void
+    {
+        $this->identityMap->clear();
+    }
+
     private function transformHits(array $hits, ClassMetadata $metadata): array
     {
         return array_map(
             function ($document) use ($metadata) {
-                $id = $this->objectManager->hydrater->extractId($document, $metadata);
+                $id = $this->objectManager->hydrater->getIdFromDocument($document, $metadata);
                 if ($this->identityMap->contains($id)) {
                     return $this->identityMap->get($id);
                 }

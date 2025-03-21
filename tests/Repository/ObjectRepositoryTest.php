@@ -11,7 +11,7 @@ use function BenTools\MeilisearchOdm\Tests\meili;
 use function expect;
 use function it;
 
-describe('ObjectRepository::find()', function () {
+describe('ObjectRepository->find()', function () {
     $objectManager = new ObjectManager(meili()->client);
     $city = null;
 
@@ -60,7 +60,7 @@ describe('ObjectRepository::find()', function () {
     });
 });
 
-describe('ObjectRepository::findOneBy()', function () {
+describe('ObjectRepository->findOneBy()', function () {
     $objectManager = new ObjectManager(meili()->client);
     $city = null;
 
@@ -118,3 +118,35 @@ describe('ObjectRepository::findOneBy()', function () {
     });
 });
 
+describe('ObjectRepository->clear()', function () {
+    $objectManager = new ObjectManager(meili()->client);
+    $country = null;
+
+    it('clears the identity map', function () use ($objectManager, &$country) {
+        meili()->willRespond(new SearchResultMockResponse([
+            [
+                'cca2' => 'AE',
+                'name' => [
+                    'common' => 'United Arab Emirates',
+                ],
+                'region' => 'Asia',
+            ],
+
+        ]));
+        $country = $objectManager->getRepository(Country::class)->find('AE');
+        $objectManager->getRepository(Country::class)->clear();
+
+        meili()->willRespond(new SearchResultMockResponse([
+            [
+                'cca2' => 'AE',
+                'name' => [
+                    'common' => 'United Arab Emirates',
+                ],
+                'region' => 'Asia',
+            ],
+
+        ]));
+        $country2 = $objectManager->getRepository(Country::class)->find('AE');
+        expect($country2)->not->toBe($country);
+    });
+});

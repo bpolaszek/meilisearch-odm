@@ -36,9 +36,14 @@ final readonly class Hydrater
         return $object;
     }
 
-    public function extractId(array $data, ClassMetadata $metadata): string|int
+    public function getIdFromDocument(array $data, ClassMetadata $metadata): string|int
     {
         return $this->propertyAccessor->getValue($data, $this->normalizePropertyPath($metadata->primaryKey));
+    }
+
+    public function getIdFromObject(object $object, ClassMetadata $metadata): string|int
+    {
+        return $this->propertyAccessor->getValue($object, $metadata->idProperty);
     }
 
     private function fetchOneToOneRelation(string $targetClass, string|int $id): ?object

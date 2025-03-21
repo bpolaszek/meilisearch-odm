@@ -13,6 +13,7 @@ final class AsMeiliDocument
     public array $properties = [];
 
     public string $className;
+    public string $idProperty;
 
     public function __construct(
         public string $indexUid,
