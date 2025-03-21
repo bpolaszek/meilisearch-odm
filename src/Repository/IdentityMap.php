@@ -2,6 +2,7 @@
 
 namespace BenTools\MeilisearchOdm\Repository;
 
+use InvalidArgumentException;
 use WeakMap;
 
 use function BenTools\IterableFunctions\iterable;
@@ -19,11 +20,15 @@ final class IdentityMap
             fn ($object) => self::UPSERT === $this->operations[$object],
         );
         set {
+            if ([] !== $value) {
+                throw new InvalidArgumentException("Invalid value");
+            }
             foreach ($this->operations as $object => $operation) {
                 if (self::UPSERT === $operation) {
                     unset($this->operations[$object]);
                 }
             }
+            $this->nbScheduledUpserts = 0;
         }
     }
 
@@ -32,13 +37,20 @@ final class IdentityMap
             fn ($object) => self::DELETE === $this->operations[$object],
         );
         set {
+            if ([] !== $value) {
+                throw new InvalidArgumentException("Invalid value");
+            }
             foreach ($this->operations as $object => $operation) {
                 if (self::DELETE === $operation) {
                     unset($this->operations[$object]);
                 }
             }
+            $this->nbScheduledDeletions = 0;
         }
     }
+
+    private(set) int $nbScheduledUpserts;
+    private(set) int $nbScheduledDeletions;
 
     public function __construct()
     {
@@ -57,16 +69,26 @@ final class IdentityMap
 
     public function scheduleUpsert(object $object): void
     {
-        if ($this->isScheduledForDeletion($object)) {
+        if ($this->isScheduledForDeletion($object) || $this->isScheduledForUpsert($object)) {
             return;
         }
 
         $this->operations[$object] = self::UPSERT;
+        $this->nbScheduledUpserts++;
     }
 
     public function scheduleDeletion(object $object): void
     {
+        if ($this->isScheduledForDeletion($object)) {
+            return; // @codeCoverageIgnore
+        }
+
+        if ($this->isScheduledForUpsert($object)) {
+            $this->nbScheduledUpserts--;
+        }
+
         $this->operations[$object] = self::DELETE;
+        $this->nbScheduledDeletions++;
     }
 
     public function contains(string|int $id): bool
@@ -88,5 +110,7 @@ final class IdentityMap
     {
         $this->storage = [];
         $this->operations = new WeakMap();
+        $this->nbScheduledUpserts = 0;
+        $this->nbScheduledDeletions = 0;
     }
 }
