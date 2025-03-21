@@ -21,7 +21,7 @@ describe('IdentityMap', function () {
         it('returns true when the object is in the identity map', function () {
             $this->identityMap->clear();
             $object = new stdClass();
-            $this->identityMap->store(1, $object);
+            $this->identityMap->attach(1, $object);
             expect($this->identityMap->contains(1))->toBeTrue();
         });
     });
@@ -35,17 +35,27 @@ describe('IdentityMap', function () {
         it('returns the object when the object is in the identity map', function () {
             $this->identityMap->clear();
             $object = new stdClass();
-            $this->identityMap->store(1, $object);
+            $this->identityMap->attach(1, $object);
             expect($this->identityMap->get(1))->toBe($object);
         });
     });
 
-    describe('->store()', function () {
+    describe('->attach()', function () {
         it('stores the object in the identity map', function () {
             $this->identityMap->clear();
             $object = new stdClass();
-            $this->identityMap->store(1, $object);
+            $this->identityMap->attach(1, $object);
             expect($this->identityMap->get(1))->toBe($object);
+        });
+    });
+
+    describe('->detach()', function () {
+        it('removes the object from the identity map', function () {
+            $this->identityMap->clear();
+            $object = new stdClass();
+            $this->identityMap->attach(1, $object);
+            $this->identityMap->detach($object);
+            expect($this->identityMap->contains(1))->toBeFalse();
         });
     });
 
@@ -53,7 +63,7 @@ describe('IdentityMap', function () {
         it('clears the identity map', function () {
             $this->identityMap->clear();
             $object = new stdClass();
-            $this->identityMap->store(1, $object);
+            $this->identityMap->attach(1, $object);
             $this->identityMap->clear();
             expect($this->identityMap->contains(1))->toBeFalse();
         });

@@ -94,8 +94,8 @@ final readonly class ObjectRepository
                 if ($this->identityMap->contains($id)) {
                     return $this->identityMap->get($id);
                 }
-                $object = $this->objectManager->hydrater->hydrate($document, new $this->className(), $metadata);
-                $this->identityMap->store($id, $object);
+                $object = $this->objectManager->hydrater->hydrateObjectFromDocument($document, new $this->className(), $metadata);
+                $this->identityMap->attach($id, $object);
 
                 return $object;
             },

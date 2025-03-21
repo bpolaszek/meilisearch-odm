@@ -23,7 +23,7 @@ describe('Hydrater', function () {
         $objectManager = new ObjectManager();
         $hydrater = new Hydrater($objectManager);
 
-        $country = $hydrater->hydrate(
+        $country = $hydrater->hydrateObjectFromDocument(
             $data,
             new Country(),
             $objectManager->classMetadataRegistry->getClassMetadata(Country::class),

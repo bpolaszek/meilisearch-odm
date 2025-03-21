@@ -21,12 +21,12 @@ final readonly class Hydrater
     ) {
     }
 
-    public function hydrate(array $data, object $object, ClassMetadata $metadata): object
+    public function hydrateObjectFromDocument(array $document, object $object, ClassMetadata $metadata): object
     {
         foreach ($metadata->properties as $propertyName => $meiliAttribute) {
             $attributeName = $meiliAttribute->attributeName ?? $propertyName;
             $propertyPath = $this->normalizePropertyPath($attributeName);
-            $rawValue = $this->propertyAccessor->getValue($data, $propertyPath);
+            $rawValue = $this->propertyAccessor->getValue($document, $propertyPath);
             $this->propertyAccessor->setValue($object, $propertyName, match ($meiliAttribute->relation?->type) {
                 MeiliRelationType::ONE_TO_ONE => $this->fetchOneToOneRelation($meiliAttribute->relation->targetClass, $rawValue),
                 default => $rawValue,
@@ -34,6 +34,45 @@ final readonly class Hydrater
         }
 
         return $object;
+    }
+
+    public function hydrateDocumentFromObject(object $object, ClassMetadata $metadata): array
+    {
+        $document = [];
+        foreach ($metadata->properties as $propertyName => $meiliAttribute) {
+            $attributeName = $meiliAttribute->attributeName ?? $propertyName;
+            $value = $this->propertyAccessor->getValue($object, $propertyName);
+            $propertyPath = $this->normalizePropertyPath($attributeName);
+            $this->propertyAccessor->setValue($document, $propertyPath, match ($meiliAttribute->relation?->type) {
+                MeiliRelationType::ONE_TO_ONE => $this->getIdFromObject($value, $this->manager->classMetadataRegistry->getClassMetadata($meiliAttribute->relation->targetClass)),
+                default => $value,
+            });
+        }
+
+        return $document;
+    }
+
+    public function computeChangeset(object $object, ?array $document = null): array
+    {
+        $repository = $this->manager->getRepository($object::class);
+        $metadata = $this->manager->classMetadataRegistry->getClassMetadata($object::class);
+        $document ??= $this->hydrateDocumentFromObject($object, $metadata);
+        $rememberedState = $repository->identityMap->rememberedStates[$object] ?? [];
+        $changeset = [];
+        foreach ($document as $attribute => $newValue) {
+            $oldValue = $rememberedState[$attribute] ?? null;
+            if (0 !== ($oldValue <=> $newValue)) {
+                $changeset[$attribute] = [$oldValue, $newValue];
+            }
+        }
+        foreach ($rememberedState as $attribute => $oldValue) {
+            $newValue = $document[$attribute] ?? null;
+            if (0 !== ($oldValue <=> $newValue)) {
+                $changeset[$attribute] = [$oldValue, $newValue];
+            }
+        }
+
+        return $changeset;
     }
 
     public function getIdFromDocument(array $data, ClassMetadata $metadata): string|int

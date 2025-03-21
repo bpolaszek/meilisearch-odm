@@ -2,18 +2,32 @@
 
 namespace BenTools\MeilisearchOdm\Repository;
 
+use Countable;
 use InvalidArgumentException;
+use IteratorAggregate;
+use Traversable;
 use WeakMap;
 
 use function BenTools\IterableFunctions\iterable;
 use function BenTools\MeilisearchOdm\weakmap_objects;
+use function count;
 
-final class IdentityMap
+/**
+ * @template T
+ * @implements IteratorAggregate<T>
+ */
+final class IdentityMap implements IteratorAggregate, Countable
 {
     private const int DELETE = 0;
     private const int UPSERT = 1;
+
+    /**
+     * @var array<string|int, object>
+     */
     private array $storage = [];
     private WeakMap $operations;
+    private WeakMap $ids;
+    private(set) Weakmap $rememberedStates;
 
     public iterable $scheduledUpserts {
         get => iterable(weakmap_objects($this->operations))->filter(
@@ -55,6 +69,8 @@ final class IdentityMap
     public function __construct()
     {
         $this->operations = new WeakMap();
+        $this->rememberedStates = new WeakMap();
+        $this->ids = new WeakMap();
     }
 
     public function isScheduledForUpsert(object $object): bool
@@ -101,16 +117,43 @@ final class IdentityMap
         return $this->storage[$id] ?? null;
     }
 
-    public function store(string|int $id, object $object): void
+    public function attach(string|int $id, object $object): void
     {
         $this->storage[$id] = $object;
+        $this->ids[$object] = $id;
+    }
+
+    public function detach(object $object): void
+    {
+        $id = $this->ids[$object] ?? null;
+        if (null !== $id) {
+            unset($this->storage[$id]);
+            unset($this->ids[$object]);
+        }
+    }
+
+    public function rememberState(object $object, array $document): void
+    {
+        $this->rememberedStates[$object] = $document;
     }
 
     public function clear(): void
     {
         $this->storage = [];
         $this->operations = new WeakMap();
+        $this->rememberedStates = new WeakMap();
+        $this->ids = new WeakMap();
         $this->nbScheduledUpserts = 0;
         $this->nbScheduledDeletions = 0;
+    }
+
+    public function getIterator(): Traversable
+    {
+        yield from $this->storage;
+    }
+
+    public function count(): int
+    {
+        return count($this->storage);
     }
 }

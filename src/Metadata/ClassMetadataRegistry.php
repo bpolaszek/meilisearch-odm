@@ -42,10 +42,7 @@ final class ClassMetadataRegistry
             /** @var AsMeiliAttribute $meiliAttribute */
             $meiliAttribute = ($propertyRefl->getAttributes(AsMeiliAttribute::class)[0] ?? null)?->newInstance();
             if (null !== $meiliAttribute) {
-                $classMetadata->registerProperty($propertyRefl->getName(), $meiliAttribute);
-                if ($meiliAttribute->attributeName === $classMetadata->primaryKey) {
-                    $classMetadata->idProperty = $propertyRefl->getName();
-                }
+                $classMetadata->registerProperty($propertyRefl, $meiliAttribute);
             }
         }
 

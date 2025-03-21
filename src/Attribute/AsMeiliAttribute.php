@@ -3,13 +3,17 @@
 namespace BenTools\MeilisearchOdm\Attribute;
 
 use Attribute;
+use ReflectionProperty;
 
 #[Attribute(Attribute::TARGET_PROPERTY)]
-final readonly class AsMeiliAttribute
+final class AsMeiliAttribute
 {
+    public AsMeiliDocument $classMetadata;
+    public ReflectionProperty $property;
+
     public function __construct(
-        public ?string $attributeName = null,
-        public ?MeiliRelation $relation = null,
+        public readonly ?string $attributeName = null,
+        public readonly ?MeiliRelation $relation = null,
     ) {
     }
 }

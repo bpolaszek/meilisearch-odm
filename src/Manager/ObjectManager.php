@@ -6,9 +6,11 @@ use BenTools\MeilisearchOdm\Hydrater\Hydrater;
 use BenTools\MeilisearchOdm\Metadata\ClassMetadataRegistry;
 use BenTools\MeilisearchOdm\Repository\ObjectRepository;
 use Meilisearch\Client;
+use Meilisearch\Exceptions\TimeOutException;
 use Symfony\Component\OptionsResolver\OptionsResolver;
 use Symfony\Component\PropertyAccess\PropertyAccessor;
 use Symfony\Component\PropertyAccess\PropertyAccessorInterface;
+use WeakMap;
 
 use function array_column;
 use function BenTools\IterableFunctions\iterable;
@@ -19,11 +21,11 @@ final class ObjectManager
 {
     private const array DEFAULT_OPTIONS = [
         'flushBatchSize' => PHP_INT_MAX,
-        'flushTimeoutMs' => 5000,
+        'flushTimeoutMs' => 900_000,
         'flushCheckIntervalMs' => 50,
     ];
 
-    public Hydrater $hydrater;
+    public readonly Hydrater $hydrater;
 
     /**
      * @var array<class-string, ObjectRepository>
@@ -33,7 +35,7 @@ final class ObjectManager
     /**
      * @var array{flushBatchSize: int, flushTimeoutMs: int, flushCheckIntervalMs: int}
      */
-    private array $options;
+    private readonly array $options;
 
     public function __construct(
         public readonly Client $meili = new Client('http://localhost:7700'),
@@ -62,7 +64,9 @@ final class ObjectManager
             $this->classMetadataRegistry->getClassMetadata($className);
 
             return new ObjectRepository($this, $className);
-        })($className);
+        })(
+            $className,
+        );
     }
 
     public function persist(object $object): void
@@ -77,26 +81,53 @@ final class ObjectManager
         $repository->identityMap->scheduleDeletion($object);
     }
 
+    /**
+     * @throws TimeOutException
+     */
     public function flush(): void
     {
         $tasks = [];
+        $flushBatchSize = $this->options['flushBatchSize'];
+        $objectToDocumentMap = new WeakMap();
+
         foreach ($this->repositories as $className => $repository) {
             $metadata = $this->classMetadataRegistry->getClassMetadata($className);
-            if ($repository->identityMap->nbScheduledUpserts > 0) {
-                $scheduledUpserts = $repository->identityMap->scheduledUpserts;
-                foreach (self::getDocumentsByBatches($scheduledUpserts, $this->options['flushBatchSize']) as $objects) {
-                    $tasks[] = $this->meili->index($metadata->indexUid)->updateDocuments(iterable($objects)->asArray());
+
+            // Compute changed entities
+            foreach ($repository->identityMap as $object) {
+                $document = $this->hydrater->hydrateDocumentFromObject($object, $metadata);
+                $changeset = $this->hydrater->computeChangeset($object, $document);
+                if ([] !== $changeset) {
+                    $repository->identityMap->scheduleUpsert($object);
+                    $objectToDocumentMap[$object] = $document; // Avoid normalizing the object twice
                 }
             }
+
+            // Process upserts
+            if ($repository->identityMap->nbScheduledUpserts > 0) {
+                $scheduledUpserts = $repository->identityMap->scheduledUpserts;
+                foreach (self::getDocumentsByBatches($scheduledUpserts, $flushBatchSize) as $objects) {
+                    $tasks[] = $this->meili->index($metadata->indexUid)->updateDocuments(
+                        iterable($objects)
+                            ->map(function (object $object) use ($objectToDocumentMap, $metadata) {
+                                return $objectToDocumentMap[$object]
+                                    ?? $this->hydrater->hydrateDocumentFromObject($object, $metadata);
+                            })
+                            ->asArray(),
+                    );
+                }
+            }
+
+            // Process deletions
             if ($repository->identityMap->nbScheduledDeletions > 0) {
                 $scheduledDeletions = $repository->identityMap->scheduledDeletions;
-                foreach (self::getDocumentsByBatches($scheduledDeletions, $this->options['flushCheckIntervalMs']) as $objects) {
+                foreach (self::getDocumentsByBatches($scheduledDeletions, $flushBatchSize) as $objects) {
                     $tasks[] = $this->meili->index($metadata->indexUid)->deleteDocuments([
                         'filter' => field($metadata->primaryKey)->isIn(
                             iterable($objects)
                                 ->map(fn (object $object) => $this->hydrater->getIdFromObject($object, $metadata))
-                                ->asArray()
-                        )
+                                ->asArray(),
+                        ),
                     ]);
                 }
             }
@@ -108,9 +139,15 @@ final class ObjectManager
             $this->options['flushCheckIntervalMs'],
         );
 
+        // Clear scheduled operations
         foreach ($this->repositories as $repository) {
             $repository->identityMap->scheduledDeletions = [];
             $repository->identityMap->scheduledUpserts = [];
+        }
+
+        // Update states
+        foreach ($objectToDocumentMap as $object => $document) {
+            $this->getRepository($object::class)->identityMap->rememberState($object, $document);
         }
     }
 
