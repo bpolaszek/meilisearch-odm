@@ -4,9 +4,6 @@ namespace BenTools\MeilisearchOdm\Attribute;
 
 use Attribute;
 
-/**
- * @codeCoverageIgnore
- */
 #[Attribute(Attribute::TARGET_PROPERTY)]
 final readonly class AsMeiliAttribute
 {

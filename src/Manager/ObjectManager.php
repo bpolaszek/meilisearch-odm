@@ -26,6 +26,11 @@ final class ObjectManager
         $this->hydrater = new Hydrater($this, $propertyAccessor);
     }
 
+    /**
+     * @template T
+     * @param class-string<T> $className
+     * @return ObjectRepository<T>
+     */
     public function getRepository(string $className): ObjectRepository
     {
         return $this->repositories[$className] ??= (function (string $className) {
@@ -36,3 +41,4 @@ final class ObjectManager
         })($className);
     }
 }
+

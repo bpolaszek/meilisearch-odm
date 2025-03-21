@@ -36,7 +36,12 @@ final readonly class Hydrater
         return $object;
     }
 
-    private function fetchOneToOneRelation(string $targetClass, mixed $id): ?object
+    public function extractId(array $data, ClassMetadata $metadata): string|int
+    {
+        return $this->propertyAccessor->getValue($data, $this->normalizePropertyPath($metadata->primaryKey));
+    }
+
+    private function fetchOneToOneRelation(string $targetClass, string|int $id): ?object
     {
         return $this->manager->getRepository($targetClass)->find($id);
     }

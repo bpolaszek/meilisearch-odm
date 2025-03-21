@@ -4,9 +4,6 @@ namespace BenTools\MeilisearchOdm\Attribute;
 
 use Attribute;
 
-/**
- * @codeCoverageIgnore
- */
 #[Attribute(Attribute::TARGET_CLASS)]
 final class AsMeiliDocument
 {
@@ -14,6 +11,8 @@ final class AsMeiliDocument
      * @var AsMeiliAttribute[]
      */
     public array $properties = [];
+
+    public string $className;
 
     public function __construct(
         public string $indexUid,
