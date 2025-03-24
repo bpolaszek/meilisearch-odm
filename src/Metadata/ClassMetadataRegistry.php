@@ -4,10 +4,13 @@ namespace BenTools\MeilisearchOdm\Metadata;
 
 use BenTools\MeilisearchOdm\Attribute\AsMeiliAttribute;
 use BenTools\MeilisearchOdm\Attribute\AsMeiliDocument as ClassMetadata;
+use BenTools\MeilisearchOdm\Misc\Reflection\Reflection;
 use InvalidArgumentException;
 use ReflectionAttribute;
 use ReflectionClass;
 
+use function array_combine;
+use function array_keys;
 use function sprintf;
 
 final class ClassMetadataRegistry
@@ -15,13 +18,15 @@ final class ClassMetadataRegistry
     /**
      * @var array<class-string, ClassMetadata>
      */
-    private array $storage = [];
+    private array $storage;
 
+    /**
+     * @param array<class-string, ClassMetadata> $configurations
+     */
     public function __construct(array $configurations = [])
     {
-        $configurations = (fn (ClassMetadata ...$configurations) => $configurations)(...$configurations);
-        foreach ($configurations as $configuration) {
-            $this->storage[$configuration->className] = $configuration; // @codeCoverageIgnore
+        foreach ($configurations as $className => $classMetadata) {
+            $this->storage[$className] = $this->populateClassMetadata(Reflection::class($className), $classMetadata);
         }
     }
 
@@ -32,12 +37,16 @@ final class ClassMetadataRegistry
 
     private function readClassMetadata(string $className): ClassMetadata
     {
-        $classRefl = new ReflectionClass($className);
+        $classRefl = Reflection::class($className);
 
         /** @var ClassMetadata $classMetadata */
         $classMetadata = $this->readClassMetadataAttribute($classRefl)->newInstance();
-        $classMetadata->className = $className;
 
+        return $this->populateClassMetadata($classRefl, $classMetadata);
+    }
+
+    private function populateClassMetadata(ReflectionClass $classRefl, ClassMetadata $classMetadata): ClassMetadata
+    {
         foreach ($classRefl->getProperties() as $propertyRefl) {
             /** @var AsMeiliAttribute $meiliAttribute */
             $meiliAttribute = ($propertyRefl->getAttributes(AsMeiliAttribute::class)[0] ?? null)?->newInstance();
@@ -46,7 +55,9 @@ final class ClassMetadataRegistry
             }
         }
 
-        $classMetadata->idProperty ??= throw self::noPrimaryKeyMapException($className, $classMetadata);
+        if (!isset($classMetadata->idProperty)) {
+            throw self::noPrimaryKeyMapException($classRefl->getName(), $classMetadata);
+        }
 
         return $classMetadata;
     }

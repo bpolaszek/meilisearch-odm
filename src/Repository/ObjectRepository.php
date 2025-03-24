@@ -5,6 +5,7 @@ namespace BenTools\MeilisearchOdm\Repository;
 use Bentools\MeilisearchFilters\Expression;
 use BenTools\MeilisearchOdm\Attribute\AsMeiliDocument as ClassMetadata;
 use BenTools\MeilisearchOdm\Manager\ObjectManager;
+use BenTools\MeilisearchOdm\Misc\Reflection\Reflection;
 use BenTools\MeilisearchOdm\Misc\Sort\Sort;
 use Meilisearch\Search\SearchResult;
 
@@ -94,7 +95,11 @@ final readonly class ObjectRepository
                 if ($this->identityMap->contains($id)) {
                     return $this->identityMap->get($id);
                 }
-                $object = $this->objectManager->hydrater->hydrateObjectFromDocument($document, new $this->className());
+                $object = Reflection::class($this->className)->newLazyProxy(function () use ($document) {
+                    $object = new ($this->className)();
+
+                    return $this->objectManager->hydrater->hydrateObjectFromDocument($document, $object);
+                });
                 $this->identityMap->attach($id, $object);
 
                 return $object;

@@ -11,10 +11,8 @@ final class AsMeiliDocument
     /**
      * @var AsMeiliAttribute[]
      */
-    public array $properties = [];
-
-    public string $className;
-    public string $idProperty;
+    private(set) array $properties = [];
+    private(set) string $idProperty;
 
     public function __construct(
         public string $indexUid,
