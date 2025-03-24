@@ -5,9 +5,9 @@ namespace BenTools\MeilisearchOdm\Repository;
 use Bentools\MeilisearchFilters\Expression;
 use BenTools\MeilisearchOdm\Attribute\AsMeiliDocument as ClassMetadata;
 use BenTools\MeilisearchOdm\Manager\ObjectManager;
+use BenTools\MeilisearchOdm\Misc\LazySearchResult;
 use BenTools\MeilisearchOdm\Misc\Reflection\Reflection;
 use BenTools\MeilisearchOdm\Misc\Sort\Sort;
-use Meilisearch\Search\SearchResult;
 
 use function array_map;
 use function Bentools\MeilisearchFilters\field;
@@ -31,7 +31,7 @@ final readonly class ObjectRepository
     }
 
     /**
-     * @return SearchResult|iterable<T>
+     * @return iterable<T>
      */
     public function findBy(
         Expression|array $filters = [],
@@ -39,19 +39,22 @@ final readonly class ObjectRepository
         $limit = PHP_INT_MAX,
         $offset = 0,
         array $params = [],
-    ): SearchResult {
+    ): LazySearchResult {
         $metadata = $this->objectManager->classMetadataRegistry->getClassMetadata($this->className);
-        $index = $this->objectManager->meili->index($metadata->indexUid);
-        $searchParams = [
-            'filter' => array_map('strval', resolve_filters($filters)),
-            'sort' => array_map('strval', resolve_sorts($sort)),
-            'limit' => $limit,
-            'offset' => $offset,
-            ...$params,
-        ];
-        $searchResult = $index->search('', $searchParams);
 
-        return $searchResult->transformHits(fn (array $hits) => $this->transformHits($hits, $metadata));
+        return new LazySearchResult(
+            $this->objectManager->meili,
+            $metadata->indexUid,
+            '',
+            [
+                'filter' => array_map('strval', resolve_filters($filters)),
+                'sort' => array_map('strval', resolve_sorts($sort)),
+                'limit' => $limit,
+                'offset' => $offset,
+                ...$params,
+            ],
+            fn (array $document) => $this->convertDocumentToObject($document, $metadata),
+        );
     }
 
     /**
@@ -77,9 +80,8 @@ final readonly class ObjectRepository
 
         $metadata = $this->objectManager->classMetadataRegistry->getClassMetadata($this->className);
         $filter = field($metadata->primaryKey)->equals($id);
-        $hits = $this->findBy($filter, limit: 1);
 
-        return [...$hits][0] ?? null;
+        return $this->findOneBy($filter);
     }
 
     public function clear(): void
@@ -87,24 +89,22 @@ final readonly class ObjectRepository
         $this->identityMap->clear();
     }
 
-    private function transformHits(array $hits, ClassMetadata $metadata): array
+    /**
+     * @return T
+     */
+    private function convertDocumentToObject(array $document, ClassMetadata $metadata): object
     {
-        return array_map(
-            function ($document) use ($metadata) {
-                $id = $this->objectManager->hydrater->getIdFromDocument($document, $metadata);
-                if ($this->identityMap->contains($id)) {
-                    return $this->identityMap->get($id);
-                }
-                $object = Reflection::class($this->className)->newLazyProxy(function () use ($document) {
-                    $object = new ($this->className)();
+        $id = $this->objectManager->hydrater->getIdFromDocument($document, $metadata);
+        if ($this->identityMap->contains($id)) {
+            return $this->identityMap->get($id);
+        }
+        $object = Reflection::class($this->className)->newLazyProxy(function () use ($document) {
+            $object = new ($this->className)();
 
-                    return $this->objectManager->hydrater->hydrateObjectFromDocument($document, $object);
-                });
-                $this->identityMap->attach($id, $object);
+            return $this->objectManager->hydrater->hydrateObjectFromDocument($document, $object);
+        });
+        $this->identityMap->attach($id, $object);
 
-                return $object;
-            },
-            $hits,
-        );
+        return $object;
     }
 }
