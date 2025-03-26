@@ -3,6 +3,8 @@
 namespace BenTools\MeilisearchOdm\Manager;
 
 use BenTools\MeilisearchOdm\Hydrater\Hydrater;
+use BenTools\MeilisearchOdm\Hydrater\PropertyTransformer\DateTimeTransformer;
+use BenTools\MeilisearchOdm\Hydrater\PropertyTransformer\PropertyTransformerInterface;
 use BenTools\MeilisearchOdm\Metadata\ClassMetadataRegistry;
 use BenTools\MeilisearchOdm\Repository\ObjectRepository;
 use Meilisearch\Client;
@@ -37,13 +39,22 @@ final class ObjectManager
      */
     private readonly array $options;
 
+    /**
+     * @param PropertyTransformerInterface[] $transformers
+     * @param array{flushBatchSize?: int, flushTimeoutMs?: int, flushCheckIntervalMs?: int} $options
+     */
     public function __construct(
         public readonly Client $meili = new Client('http://localhost:7700'),
         public readonly ClassMetadataRegistry $classMetadataRegistry = new ClassMetadataRegistry(),
         PropertyAccessorInterface $propertyAccessor = new PropertyAccessor(),
+        array $transformers = [new DateTimeTransformer()],
         array $options = [],
     ) {
-        $this->hydrater = new Hydrater($this, $propertyAccessor);
+        $this->hydrater = new Hydrater(
+            $this,
+            $propertyAccessor,
+            (fn (PropertyTransformerInterface ...$transformers) => $transformers)(...$transformers),
+        );
         $optionsResolver = new OptionsResolver();
         $optionsResolver->setDefaults(self::DEFAULT_OPTIONS);
         $optionsResolver->setAllowedTypes('flushBatchSize', ['int']);

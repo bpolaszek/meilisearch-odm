@@ -4,11 +4,10 @@ namespace BenTools\MeilisearchOdm\Tests\Hydrater\PropertyTransformer;
 
 use BenTools\MeilisearchOdm\Attribute\AsMeiliAttribute;
 use BenTools\MeilisearchOdm\Attribute\AsMeiliDocument;
-use BenTools\MeilisearchOdm\Hydrater\PropertyTransformer\DateTimeTransformer;
 use BenTools\MeilisearchOdm\Manager\ObjectManager;
 use BenTools\MeilisearchOdm\Metadata\ClassMetadataRegistry;
-
 use DateTimeImmutable;
+use DateTimeInterface;
 
 use function describe;
 use function expect;
@@ -19,8 +18,8 @@ describe('DateTimeTransformer', function () {
         #[AsMeiliAttribute]
         public ?int $id;
 
-        #[AsMeiliAttribute(transformer: new DateTimeTransformer())]
-        public ?DateTimeImmutable $createdAt;
+        #[AsMeiliAttribute]
+        public ?DateTimeInterface $createdAt;
     };
 
     test('->toObjectProperty()', function () use ($object) {

@@ -5,6 +5,8 @@ namespace BenTools\MeilisearchOdm\Hydrater;
 use BenTools\MeilisearchOdm\Attribute\AsMeiliAttribute as AttributeMetadata;
 use BenTools\MeilisearchOdm\Attribute\AsMeiliDocument as ClassMetadata;
 use BenTools\MeilisearchOdm\Attribute\MeiliRelationType;
+use BenTools\MeilisearchOdm\Hydrater\PropertyTransformer\DateTimeTransformer;
+use BenTools\MeilisearchOdm\Hydrater\PropertyTransformer\PropertyTransformerInterface;
 use BenTools\MeilisearchOdm\Manager\ObjectManager;
 use Symfony\Component\PropertyAccess\PropertyAccessor;
 use Symfony\Component\PropertyAccess\PropertyAccessorInterface;
@@ -19,6 +21,7 @@ final readonly class Hydrater
     public function __construct(
         private ObjectManager $manager,
         private PropertyAccessorInterface $propertyAccessor = new PropertyAccessor(),
+        private array $transformers = [],
     ) {
     }
 
@@ -57,20 +60,32 @@ final readonly class Hydrater
 
     private function hydratePropertyFromDocument(mixed $value, AttributeMetadata $attribute): mixed
     {
-        if (null === $attribute->transformer) {
-            return $value;
+        if (null !== $attribute->transformer) {
+            return $attribute->transformer->toObjectProperty($value, $attribute);
         }
 
-        return $attribute->transformer->toObjectProperty($value, $attribute);
+        foreach ($this->transformers as $transformer) {
+            if ($transformer->supports($attribute)) {
+                return $transformer->toObjectProperty($value, $attribute);
+            }
+        }
+
+        return $value;
     }
 
     private function hydrateAttributeFromObject(mixed $value, AttributeMetadata $attribute): mixed
     {
-        if (null === $attribute->transformer) {
-            return $value;
+        if (null !== $attribute->transformer) {
+            return $attribute->transformer->toDocumentAttribute($value, $attribute);
         }
 
-        return $attribute->transformer->toDocumentAttribute($value, $attribute);
+        foreach ($this->transformers as $transformer) {
+            if ($transformer->supports($attribute)) {
+                return $transformer->toDocumentAttribute($value, $attribute);
+            }
+        }
+
+        return $value;
     }
 
     public function computeChangeset(object $object, ?array $document = null): array

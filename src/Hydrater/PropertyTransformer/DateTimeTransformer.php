@@ -3,20 +3,34 @@
 namespace BenTools\MeilisearchOdm\Hydrater\PropertyTransformer;
 
 use BenTools\MeilisearchOdm\Attribute\AsMeiliAttribute as AttributeMetadata;
+use BenTools\MeilisearchOdm\Misc\Reflection\Reflection;
+use DateTime;
 use DateTimeImmutable;
+use DateTimeInterface;
 use InvalidArgumentException;
 
 use function sprintf;
 
 final readonly class DateTimeTransformer implements PropertyTransformerInterface
 {
-    public function toObjectProperty(mixed $value, AttributeMetadata $metadata): ?DateTimeImmutable
+    public function supports(AttributeMetadata $metadata): bool
+    {
+        return Reflection::isPropertyCompatible($metadata->property, DateTimeInterface::class);
+    }
+
+    public function toObjectProperty(mixed $value, AttributeMetadata $metadata): ?DateTimeInterface
     {
         if (null === $value) {
             return null;
         }
 
-        return DateTimeImmutable::createFromTimestamp((int) $value);
+        /** @var class-string<DateTime|DateTimeImmutable> $className */
+        $className = Reflection::getBestClassForProperty($metadata->property, [
+            DateTimeImmutable::class,
+            DateTime::class,
+        ]);
+
+        return $className::createFromTimestamp((int) $value);
     }
 
     public function toDocumentAttribute(mixed $value, AttributeMetadata $metadata): ?int
@@ -25,10 +39,12 @@ final readonly class DateTimeTransformer implements PropertyTransformerInterface
             return null;
         }
 
-        if ($value instanceof DateTimeImmutable) {
+        if ($value instanceof DateTimeInterface) {
             return $value->getTimestamp();
         }
 
-        throw new InvalidArgumentException(sprintf("Expected a DateTimeImmutable instance, got %s", get_debug_type($value)));
+        throw new InvalidArgumentException(
+            sprintf("Expected an instance of DateTimeInterface, got %s", get_debug_type($value)),
+        );
     }
 }
