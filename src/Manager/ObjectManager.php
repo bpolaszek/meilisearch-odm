@@ -179,9 +179,9 @@ final class ObjectManager
     }
 
     /**
-     * @return list<iterable<object>>
+     * @return iterable<iterable<object>>
      */
-    private static function getDocumentsByBatches(iterable $documents, int $batchSize): array
+    private static function getDocumentsByBatches(iterable $documents, int $batchSize): iterable
     {
         if (PHP_INT_MAX === $batchSize) {
             return [$documents];

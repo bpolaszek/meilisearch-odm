@@ -7,5 +7,5 @@ use BenTools\MeilisearchOdm\Attribute\AsMeiliAttribute;
 trait MaybeGeolocatedDocumentTrait
 {
     #[AsMeiliAttribute]
-    public ?CoordinatesInterface $_geo;
+    public ?CoordinatesInterface $_geo = null;
 }
