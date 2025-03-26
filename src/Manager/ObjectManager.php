@@ -111,7 +111,6 @@ final class ObjectManager
                 $document = $this->hydrater->hydrateDocumentFromObject($object);
                 $changeset = $this->hydrater->computeChangeset($object, $document);
                 if ([] !== $changeset) {
-                    dump('changeset', $changeset);
                     $repository->identityMap->scheduleUpsert($object);
                     $objectToDocumentMap[$object] = $document; // Avoid normalizing the object twice
                 }
@@ -137,7 +136,7 @@ final class ObjectManager
                 $scheduledDeletions = $repository->identityMap->scheduledDeletions;
                 foreach (self::getDocumentsByBatches($scheduledDeletions, $flushBatchSize) as $objects) {
                     $tasks[] = $this->meili->index($metadata->indexUid)->deleteDocuments([
-                        'filter' => field($metadata->primaryKey)->isIn(
+                        'filter' => (string) field($metadata->primaryKey)->isIn(
                             iterable($objects)
                                 ->map(fn (object $object) => $this->hydrater->getIdFromObject($object))
                                 ->asArray(),
@@ -155,8 +154,15 @@ final class ObjectManager
 
         // Clear scheduled operations
         foreach ($this->repositories as $repository) {
-            $repository->identityMap->scheduledDeletions = [];
             $repository->identityMap->scheduledUpserts = [];
+            $scheduledDeletions = $repository->identityMap->scheduledDeletions;
+            foreach (self::getDocumentsByBatches($scheduledDeletions, $flushBatchSize) as $objects) {
+                foreach ($objects as $object) {
+                    $repository->identityMap->forgetState($object);
+                    $repository->identityMap->detach($object);
+                }
+            }
+            $repository->identityMap->scheduledDeletions = [];
         }
 
         // Update states

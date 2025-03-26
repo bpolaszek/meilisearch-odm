@@ -137,6 +137,11 @@ final class IdentityMap implements IteratorAggregate, Countable
         $this->rememberedStates[$object] = $document;
     }
 
+    public function forgetState(object $object): void
+    {
+        unset($this->rememberedStates[$object]);
+    }
+
     public function clear(): void
     {
         $this->storage = [];
