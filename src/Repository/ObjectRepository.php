@@ -99,11 +99,12 @@ final readonly class ObjectRepository
             return $this->identityMap->get($id);
         }
         $object = Reflection::class($this->className)->newLazyProxy(function () use ($document) {
-            $object = new ($this->className)();
+            $instance = Reflection::class($this->className)->newInstanceWithoutConstructor();
 
-            return $this->objectManager->hydrater->hydrateObjectFromDocument($document, $object);
+            return $this->objectManager->hydrater->hydrateObjectFromDocument($document, $instance);
         });
         $this->identityMap->attach($id, $object);
+        $this->identityMap->rememberState($object, $document);
 
         return $object;
     }

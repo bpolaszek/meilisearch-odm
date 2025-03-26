@@ -5,6 +5,7 @@ namespace BenTools\MeilisearchOdm\Misc\Reflection;
 use InvalidArgumentException;
 use ReflectionClass;
 use ReflectionIntersectionType;
+use ReflectionMethod;
 use ReflectionNamedType;
 use ReflectionProperty;
 use ReflectionType;
@@ -19,6 +20,7 @@ final class Reflection
     private static self $instance;
     private array $reflectionClassCache = [];
     private array $reflectionPropertyCache = [];
+    private array $reflectionMethodCache = [];
     private WeakMap $reflectionTypesCache;
 
     private function __construct()
@@ -43,6 +45,13 @@ final class Reflection
         $className = is_object($class) ? $class::class : $class;
 
         return self::get()->reflectionPropertyCache[$className][$property] ??= self::class($class)->getProperty($property);
+    }
+
+    public static function method(object|string $class, string $method): ReflectionMethod
+    {
+        $className = is_object($class) ? $class::class : $class;
+
+        return self::get()->reflectionMethodCache[$className][$method] ??= self::class($class)->getMethod($method);
     }
 
     public static function getBestClassForProperty(ReflectionProperty $property, array $classNames): string

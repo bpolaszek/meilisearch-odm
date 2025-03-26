@@ -3,8 +3,10 @@
 namespace BenTools\MeilisearchOdm\Manager;
 
 use BenTools\MeilisearchOdm\Hydrater\Hydrater;
+use BenTools\MeilisearchOdm\Hydrater\PropertyTransformer\CoordinatesTransformer;
 use BenTools\MeilisearchOdm\Hydrater\PropertyTransformer\DateTimeTransformer;
 use BenTools\MeilisearchOdm\Hydrater\PropertyTransformer\PropertyTransformerInterface;
+use BenTools\MeilisearchOdm\Hydrater\PropertyTransformer\StringableTransformer;
 use BenTools\MeilisearchOdm\Metadata\ClassMetadataRegistry;
 use BenTools\MeilisearchOdm\Repository\ObjectRepository;
 use Meilisearch\Client;
@@ -47,7 +49,7 @@ final class ObjectManager
         public readonly Client $meili = new Client('http://localhost:7700'),
         public readonly ClassMetadataRegistry $classMetadataRegistry = new ClassMetadataRegistry(),
         PropertyAccessorInterface $propertyAccessor = new PropertyAccessor(),
-        array $transformers = [new DateTimeTransformer()],
+        array $transformers = [new DateTimeTransformer(), new StringableTransformer(), new CoordinatesTransformer()],
         array $options = [],
     ) {
         $this->hydrater = new Hydrater(
@@ -109,6 +111,7 @@ final class ObjectManager
                 $document = $this->hydrater->hydrateDocumentFromObject($object);
                 $changeset = $this->hydrater->computeChangeset($object, $document);
                 if ([] !== $changeset) {
+                    dump('changeset', $changeset);
                     $repository->identityMap->scheduleUpsert($object);
                     $objectToDocumentMap[$object] = $document; // Avoid normalizing the object twice
                 }

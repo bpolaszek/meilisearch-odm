@@ -63,8 +63,8 @@ final class IdentityMap implements IteratorAggregate, Countable
         }
     }
 
-    private(set) int $nbScheduledUpserts;
-    private(set) int $nbScheduledDeletions;
+    private(set) int $nbScheduledUpserts = 0;
+    private(set) int $nbScheduledDeletions = 0;
 
     public function __construct()
     {

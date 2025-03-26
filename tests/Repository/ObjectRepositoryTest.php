@@ -22,6 +22,10 @@ describe('ObjectRepository->find()', function () {
                 'name' => 'Dubaï',
                 'country code' => 'AE',
                 'population' => 2956587,
+                '_geo' => [
+                    'lat' => 25.07725,
+                    'lng' => 55.30927,
+                ],
             ],
 
         ]),
@@ -71,6 +75,10 @@ describe('ObjectRepository->findOneBy()', function () {
                 'name' => 'Dubaï',
                 'country code' => 'AE',
                 'population' => 2956587,
+                '_geo' => [
+                    'lat' => 25.07725,
+                    'lng' => 55.30927,
+                ],
             ],
 
         ]),
@@ -103,6 +111,10 @@ describe('ObjectRepository->findOneBy()', function () {
                 'name' => 'Dubaï',
                 'country code' => 'AE',
                 'population' => 2956587,
+                '_geo' => [
+                    'lat' => 25.07725,
+                    'lng' => 55.30927,
+                ],
             ],
 
         ]));

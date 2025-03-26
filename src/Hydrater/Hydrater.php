@@ -33,7 +33,7 @@ final readonly class Hydrater
             $propertyPath = $this->normalizePropertyPath($attributeName);
             $rawValue = $this->propertyAccessor->getValue($document, $propertyPath);
             $this->propertyAccessor->setValue($object, $propertyName, match ($meiliAttribute->relation?->type) {
-                MeiliRelationType::ONE_TO_ONE => $this->fetchOneToOneRelation($meiliAttribute->relation->targetClass, $rawValue),
+                MeiliRelationType::MANY_TO_ONE => $this->fetchOneToOneRelation($meiliAttribute->relation->targetClass, $rawValue),
                 default => $this->hydratePropertyFromDocument($rawValue, $meiliAttribute),
             });
         }
@@ -50,7 +50,7 @@ final readonly class Hydrater
             $value = $this->propertyAccessor->getValue($object, $propertyName);
             $propertyPath = $this->normalizePropertyPath($attributeName);
             $this->propertyAccessor->setValue($document, $propertyPath, match ($meiliAttribute->relation?->type) {
-                MeiliRelationType::ONE_TO_ONE => $this->getIdFromObject($value),
+                MeiliRelationType::MANY_TO_ONE => $this->getIdFromObject($value),
                 default => $this->hydrateAttributeFromObject($value, $meiliAttribute),
             });
         }
