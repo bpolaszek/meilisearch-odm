@@ -9,7 +9,7 @@ use ReflectionProperty;
 final class AsMeiliDocument
 {
     /**
-     * @var AsMeiliAttribute[]
+     * @var array<string, AsMeiliAttribute>
      */
     private(set) array $properties = [];
     private(set) string $idProperty;

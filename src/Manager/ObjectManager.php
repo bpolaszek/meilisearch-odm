@@ -82,16 +82,20 @@ final class ObjectManager
         );
     }
 
-    public function persist(object $object): void
+    public function persist(object $object, object ...$objects): void
     {
-        $repository = $this->getRepository($object::class);
-        $repository->identityMap->scheduleUpsert($object);
+        foreach ([$object, ...$objects] as $object) {
+            $repository = $this->getRepository($object::class);
+            $repository->identityMap->scheduleUpsert($object);
+        }
     }
 
-    public function remove(object $object): void
+    public function remove(object $object, object ...$objects): void
     {
-        $repository = $this->getRepository($object::class);
-        $repository->identityMap->scheduleDeletion($object);
+        foreach ([$object, ...$objects] as $object) {
+            $repository = $this->getRepository($object::class);
+            $repository->identityMap->scheduleDeletion($object);
+        }
     }
 
     /**

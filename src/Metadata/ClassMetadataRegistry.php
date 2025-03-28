@@ -9,8 +9,7 @@ use InvalidArgumentException;
 use ReflectionAttribute;
 use ReflectionClass;
 
-use function array_combine;
-use function array_keys;
+use function array_is_list;
 use function sprintf;
 
 final class ClassMetadataRegistry
@@ -18,15 +17,21 @@ final class ClassMetadataRegistry
     /**
      * @var array<class-string, ClassMetadata>
      */
-    private array $storage;
+    private(set) array $storage = [];
 
     /**
-     * @param array<class-string, ClassMetadata> $configurations
+     * @param array<class-string, ClassMetadata>|list<class-string> $configurations
      */
     public function __construct(array $configurations = [])
     {
-        foreach ($configurations as $className => $classMetadata) {
-            $this->storage[$className] = $this->populateClassMetadata(Reflection::class($className), $classMetadata);
+        if (array_is_list($configurations)) {
+            foreach ($configurations as $className) {
+                $this->getClassMetadata($className);
+            }
+        } else {
+            foreach ($configurations as $className => $classMetadata) {
+                $this->storage[$className] = $this->populateClassMetadata(Reflection::class($className), $classMetadata);
+            }
         }
     }
 
