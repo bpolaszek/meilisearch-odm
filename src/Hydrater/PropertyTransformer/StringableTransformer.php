@@ -22,13 +22,21 @@ class StringableTransformer implements PropertyTransformerInterface
 
     public function toObjectProperty(mixed $value, AttributeMetadata $metadata): mixed
     {
+        if (null === $value) {
+            return null;
+        }
+
         $targetClassName = ltrim($metadata->property->getType()->getName(), '?');
 
         return $targetClassName::fromString($value);
     }
 
-    public function toDocumentAttribute(mixed $value, AttributeMetadata $metadata): mixed
+    public function toDocumentAttribute(mixed $value, AttributeMetadata $metadata): ?string
     {
+        if (null === $value) {
+            return null;
+        }
+
         return (string) $value;
     }
 }
