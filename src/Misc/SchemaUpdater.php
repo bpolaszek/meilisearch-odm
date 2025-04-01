@@ -9,7 +9,6 @@ use Closure;
 use Exception;
 use Meilisearch\Client;
 
-use function array_filter;
 use function array_values;
 use function BenTools\IterableFunctions\iterable;
 
