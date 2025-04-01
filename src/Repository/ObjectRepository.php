@@ -8,11 +8,14 @@ use BenTools\MeilisearchOdm\Manager\ObjectManager;
 use BenTools\MeilisearchOdm\Misc\LazySearchResult;
 use BenTools\MeilisearchOdm\Misc\Reflection\Reflection;
 use BenTools\MeilisearchOdm\Misc\Sort\Sort;
+use InvalidArgumentException;
 
+use function array_keys;
 use function array_map;
 use function Bentools\MeilisearchFilters\field;
-use function BenTools\MeilisearchOdm\resolve_filters;
-use function BenTools\MeilisearchOdm\resolve_sorts;
+use function is_array;
+use function is_object;
+use function is_scalar;
 
 use const PHP_INT_MAX;
 
@@ -47,8 +50,8 @@ final readonly class ObjectRepository
             $metadata->indexUid,
             '',
             [
-                'filter' => array_map('strval', resolve_filters($filters)),
-                'sort' => array_map('strval', resolve_sorts($sort)),
+                'filter' => array_map('strval', $this->resolveFilters($filters)),
+                'sort' => array_map('strval', $this->resolveSorts($sort)),
                 'limit' => $limit,
                 'offset' => $offset,
                 ...$params,
@@ -107,5 +110,49 @@ final readonly class ObjectRepository
         $this->identityMap->rememberState($object, $document);
 
         return $object;
+    }
+
+    /**
+     * @param Expression|Expression[]|array<string, mixed> $filters
+     * @return Expression[]
+     */
+    private function resolveFilters(Expression|array $filters): array {
+        if ($filters instanceof Expression) {
+            return [$filters];
+        }
+
+        if (!array_is_list($filters)) {
+            $expressions = [];
+            foreach ($filters as $field => $value) {
+                if (is_object($value)) {
+                    $value = $this->objectManager->hydrater->getIdFromObject($value);
+                }
+                if (!is_scalar($value) && !is_array($value)) {
+                    throw new InvalidArgumentException("Filter value must be scalar or array");
+                }
+                $expressions[] = field($field)->isIn((array) $value);
+            }
+
+            return $expressions;
+        }
+
+        return (fn (Expression ...$expressions) => $expressions)(...$filters);
+    }
+
+    /**
+     * @param Sort|Sort[]|array<string, 'asc' | 'desc'> $sorts
+     * @return Sort[]
+     */
+    private function resolveSorts(Sort|array $sorts): array
+    {
+        if ($sorts instanceof Sort) {
+            return [$sorts];
+        }
+
+        if (!array_is_list($sorts)) {
+            return array_map(fn (string $field, string $direction) => new Sort($field, $direction), array_keys($sorts), $sorts);
+        }
+
+        return (fn (Sort ...$sorts) => $sorts)(...$sorts);
     }
 }

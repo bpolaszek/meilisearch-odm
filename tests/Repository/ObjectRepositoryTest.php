@@ -3,11 +3,19 @@
 namespace BenTools\MeilisearchOdm\Tests\Repository;
 
 use BenTools\MeilisearchOdm\Manager\ObjectManager;
+use BenTools\MeilisearchOdm\Misc\Reflection\Reflection;
+use BenTools\MeilisearchOdm\Misc\Sort\GeoPoint;
+use BenTools\MeilisearchOdm\Misc\Sort\Sort;
+use BenTools\MeilisearchOdm\Misc\Sort\SortDirection;
+use BenTools\MeilisearchOdm\Repository\ObjectRepository;
 use BenTools\MeilisearchOdm\Tests\Fixtures\City;
 use BenTools\MeilisearchOdm\Tests\Fixtures\Country;
 use BenTools\MeilisearchOdm\Tests\Fixtures\SearchResultMockResponse;
 
+use function array_map;
+use function Bentools\MeilisearchFilters\field;
 use function BenTools\MeilisearchOdm\Tests\meili;
+use function describe;
 use function expect;
 use function it;
 
@@ -160,5 +168,95 @@ describe('ObjectRepository->clear()', function () {
         ]));
         $country2 = $objectManager->getRepository(Country::class)->find('AE');
         expect($country2)->not->toBe($country);
+    });
+});
+
+describe('ObjectRepository->resolveFilters()', function () {
+    $refl = Reflection::class(ObjectRepository::class);
+    $repository = $refl->newInstanceWithoutConstructor();
+    $resolveFilters = fn ($input) => $refl->getMethod('resolveFilters')->invokeArgs($repository, [$input]);
+
+    it('processes an associative array', function () use ($resolveFilters) {
+        $filters = [
+            'foo' => 'bar',
+            'baz' => 'qux',
+        ];
+        $expressions = $resolveFilters($filters);
+        expect($expressions)->toBeArray()
+            ->and($expressions)->toHaveCount(2)
+            ->and($expressions)->toEqual([
+                field('foo')->isIn(['bar']),
+                field('baz')->isIn(['qux']),
+            ]);
+    });
+
+    it('processes an array of expressions', function () use ($resolveFilters) {
+        $filters = [
+            field('foo')->isIn(['bar']),
+            field('baz')->isIn(['qux']),
+        ];
+        $expressions = $resolveFilters($filters);
+        expect($expressions)->toBeArray()
+            ->and($expressions)->toHaveCount(2)
+            ->and($expressions)->toEqual($filters);
+    });
+
+    it('processes a single expression', function () use ($resolveFilters) {
+        $filter = field('foo')->isIn(['bar']);
+        $expressions = $resolveFilters($filter);
+        expect($expressions)->toBeArray()
+            ->and($expressions)->toHaveCount(1)
+            ->and($expressions)->toEqual([$filter]);
+    });
+});
+
+describe('ObjectRepository->resolveSorts()', function () {
+    $refl = Reflection::class(ObjectRepository::class);
+    $repository = $refl->newInstanceWithoutConstructor();
+    $resolveSorts = fn ($input) => $refl->getMethod('resolveSorts')->invokeArgs($repository, [$input]);
+
+    it('processes an associative array', function () use ($resolveSorts) {
+        $sorts = [
+            'foo' => 'asc',
+            'baz' => 'desc',
+        ];
+        $sorts = $resolveSorts($sorts);
+        expect($sorts)->toBeArray()
+            ->and($sorts)->toHaveCount(2)
+            ->and($sorts)->toEqual([
+                new Sort('foo', 'asc'),
+                new Sort('baz', 'desc'),
+            ]);
+    });
+
+    it('processes an array of sorts', function () use ($resolveSorts) {
+        $sorts = [
+            new Sort('foo', 'asc'),
+            new Sort('baz', 'desc'),
+        ];
+        $sorts = $resolveSorts($sorts);
+        expect($sorts)->toBeArray()
+            ->and($sorts)->toHaveCount(2)
+            ->and($sorts)->toEqual($sorts);
+    });
+
+    it('processes a single sort', function () use ($resolveSorts) {
+        $sort = new Sort('foo', 'asc');
+        $sorts = $resolveSorts($sort);
+        expect($sorts)->toBeArray()
+            ->and($sorts)->toHaveCount(1)
+            ->and($sorts)->toEqual([$sort]);
+    });
+
+    it('stringifies sorts', function () {
+        $sorts = [
+            new Sort(new GeoPoint(48.8561446, 2.2978204), SortDirection::DESC),
+            new Sort('name', 'asc'),
+        ];
+
+        expect(array_map('strval', $sorts))->toBe([
+            '_geoPoint(48.8561446,2.2978204):desc',
+            'name:asc',
+        ]);
     });
 });
