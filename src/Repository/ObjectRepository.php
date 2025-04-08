@@ -4,6 +4,8 @@ namespace BenTools\MeilisearchOdm\Repository;
 
 use Bentools\MeilisearchFilters\Expression;
 use BenTools\MeilisearchOdm\Attribute\AsMeiliDocument as ClassMetadata;
+use BenTools\MeilisearchOdm\Event\PostLoadEvent;
+use BenTools\MeilisearchOdm\Event\PrePersistEvent;
 use BenTools\MeilisearchOdm\Manager\ObjectManager;
 use BenTools\MeilisearchOdm\Misc\LazySearchResult;
 use BenTools\MeilisearchOdm\Misc\Reflection\Reflection;
@@ -103,6 +105,12 @@ final readonly class ObjectRepository
         }
         $object = Reflection::class($this->className)->newLazyProxy(function () use ($document) {
             $instance = Reflection::class($this->className)->newInstanceWithoutConstructor();
+            $event = new PostLoadEvent($instance, $this);
+            $metadata = $this->objectManager->classMetadataRegistry->getClassMetadata($this->className);
+            foreach ($metadata->listeners[PostLoadEvent::class] ?? [] as $listener) {
+                $listener->invoke($instance, [$event]);
+            }
+            $this->objectManager->eventDispatcher->dispatch($event);
 
             return $this->objectManager->hydrater->hydrateObjectFromDocument($document, $instance);
         });

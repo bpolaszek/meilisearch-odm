@@ -4,6 +4,12 @@ namespace BenTools\MeilisearchOdm\Metadata;
 
 use BenTools\MeilisearchOdm\Attribute\AsMeiliAttribute;
 use BenTools\MeilisearchOdm\Attribute\AsMeiliDocument as ClassMetadata;
+use BenTools\MeilisearchOdm\Attribute\PostLoad;
+use BenTools\MeilisearchOdm\Attribute\PrePersist;
+use BenTools\MeilisearchOdm\Attribute\PreUpdate;
+use BenTools\MeilisearchOdm\Event\PostLoadEvent;
+use BenTools\MeilisearchOdm\Event\PrePersistEvent;
+use BenTools\MeilisearchOdm\Event\PreUpdateEvent;
 use BenTools\MeilisearchOdm\Misc\Reflection\Reflection;
 use InvalidArgumentException;
 use ReflectionAttribute;
@@ -57,6 +63,18 @@ final class ClassMetadataRegistry
             $meiliAttribute = ($propertyRefl->getAttributes(AsMeiliAttribute::class)[0] ?? null)?->newInstance();
             if (null !== $meiliAttribute) {
                 $classMetadata->registerProperty($propertyRefl, $meiliAttribute);
+            }
+        }
+
+        foreach ($classRefl->getMethods() as $methodRefl) {
+            if ($methodRefl->getAttributes(PostLoad::class) !== []) {
+                $classMetadata->registerListener(PostLoadEvent::class, $methodRefl);
+            }
+            if ($methodRefl->getAttributes(PrePersist::class) !== []) {
+                $classMetadata->registerListener(PrePersistEvent::class, $methodRefl);
+            }
+            if ($methodRefl->getAttributes(PreUpdate::class) !== []) {
+                $classMetadata->registerListener(PreUpdateEvent::class, $methodRefl);
             }
         }
 

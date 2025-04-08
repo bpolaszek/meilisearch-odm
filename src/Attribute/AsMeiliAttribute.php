@@ -16,6 +16,7 @@ final class AsMeiliAttribute
         public readonly ?string $attributeName = null,
         public readonly ?MeiliRelation $relation = null,
         public readonly ?PropertyTransformerInterface $transformer = null,
+        public readonly ?bool $filterable = null,
     ) {
     }
 }

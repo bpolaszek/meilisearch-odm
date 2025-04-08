@@ -28,6 +28,7 @@ final class IdentityMap implements IteratorAggregate, Countable
     private WeakMap $operations;
     private WeakMap $ids;
     private(set) Weakmap $rememberedStates;
+    private WeakMap $pendingInserts;
 
     public iterable $scheduledUpserts {
         get => iterable(weakmap_objects($this->operations))->filter(
@@ -42,6 +43,7 @@ final class IdentityMap implements IteratorAggregate, Countable
                     unset($this->operations[$object]);
                 }
             }
+            $this->pendingInserts = new WeakMap();
             $this->nbScheduledUpserts = 0;
         }
     }
@@ -71,6 +73,12 @@ final class IdentityMap implements IteratorAggregate, Countable
         $this->operations = new WeakMap();
         $this->rememberedStates = new WeakMap();
         $this->ids = new WeakMap();
+        $this->pendingInserts = new WeakMap();
+    }
+
+    public function isScheduledForInsert(object $object): bool
+    {
+        return isset($this->pendingInserts[$object]);
     }
 
     public function isScheduledForUpsert(object $object): bool
@@ -87,6 +95,10 @@ final class IdentityMap implements IteratorAggregate, Countable
     {
         if ($this->isScheduledForDeletion($object) || $this->isScheduledForUpsert($object)) {
             return;
+        }
+
+        if (!isset($this->rememberedStates[$object])) {
+            $this->pendingInserts[$object] = true;
         }
 
         $this->operations[$object] = self::UPSERT;
@@ -147,6 +159,7 @@ final class IdentityMap implements IteratorAggregate, Countable
         $this->storage = [];
         $this->operations = new WeakMap();
         $this->rememberedStates = new WeakMap();
+        $this->pendingInserts = new WeakMap();
         $this->ids = new WeakMap();
         $this->nbScheduledUpserts = 0;
         $this->nbScheduledDeletions = 0;

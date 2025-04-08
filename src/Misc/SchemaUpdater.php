@@ -30,7 +30,8 @@ final readonly class SchemaUpdater
                 $metadata->primaryKey,
                 ...iterable(array_values($metadata->properties))
                     ->filter(function (AsMeiliAttribute $attribute) {
-                    return null !== $attribute->relation;
+                    return null !== $attribute->relation
+                        || true === $attribute->filterable;
                 })
                     ->map(fn (AsMeiliAttribute $attr) => $attr->attributeName ?? $attr->property->getName())
             ];
