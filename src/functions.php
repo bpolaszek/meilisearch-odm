@@ -2,6 +2,7 @@
 
 namespace BenTools\MeilisearchOdm;
 
+use BenTools\MeilisearchOdm\Misc\UniqueList;
 use WeakMap;
 
 use function in_array;
@@ -29,4 +30,20 @@ function weakmap_values(WeakMap $weakmap): array
     }
 
     return $values;
+}
+
+/**
+ * @template T
+ * @param iterable<T> $items
+ *
+ * @return UniqueList<T>
+ */
+function uniqueList(iterable $items = []): UniqueList
+{
+    $storage = new UniqueList();
+    foreach ($items as $key => $value) {
+        $storage[$key] = $value;
+    }
+
+    return $storage;
 }

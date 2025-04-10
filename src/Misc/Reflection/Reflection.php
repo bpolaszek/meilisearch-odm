@@ -13,6 +13,9 @@ use ReflectionUnionType;
 use WeakMap;
 
 use function array_all;
+use function array_filter;
+use function array_unique;
+use function array_values;
 use function ltrim;
 
 final class Reflection
@@ -52,6 +55,48 @@ final class Reflection
         $className = is_object($class) ? $class::class : $class;
 
         return self::get()->reflectionMethodCache[$className][$method] ??= self::class($class)->getMethod($method);
+    }
+
+    /**
+     * @return class-string[]
+     */
+    public static function getSettableClassTypes(ReflectionProperty $property): array
+    {
+        $classNames = [];
+        $type = $property->getSettableType();
+
+        if ($type === null) {
+            return [];
+        }
+
+        self::collectClassNames($type, $classNames);
+
+        return array_values(
+            array_unique(
+                array_filter(
+                    $classNames,
+                    fn (string $classType) => self::class($type)->isInstantiable(),
+                )
+            )
+        );
+    }
+
+    private static function collectClassNames(ReflectionType $type, array &$classNames): void
+    {
+        if ($type instanceof ReflectionNamedType) {
+            $typeName = $type->getName();
+
+            // Skip built-in types
+            if (!$type->isBuiltin()) {
+                // Remove nullable prefix if present
+                $classNames[] = ltrim($typeName, '?');
+            }
+        } elseif ($type instanceof ReflectionUnionType || $type instanceof ReflectionIntersectionType) {
+            // For union or intersection types, process each type recursively
+            foreach ($type->getTypes() as $subType) {
+                self::collectClassNames($subType, $classNames);
+            }
+        }
     }
 
     public static function getBestClassForProperty(ReflectionProperty $property, array $classNames): string

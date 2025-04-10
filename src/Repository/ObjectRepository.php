@@ -5,13 +5,13 @@ namespace BenTools\MeilisearchOdm\Repository;
 use Bentools\MeilisearchFilters\Expression;
 use BenTools\MeilisearchOdm\Attribute\AsMeiliDocument as ClassMetadata;
 use BenTools\MeilisearchOdm\Event\PostLoadEvent;
-use BenTools\MeilisearchOdm\Event\PrePersistEvent;
 use BenTools\MeilisearchOdm\Manager\ObjectManager;
 use BenTools\MeilisearchOdm\Misc\LazySearchResult;
 use BenTools\MeilisearchOdm\Misc\Reflection\Reflection;
 use BenTools\MeilisearchOdm\Misc\Sort\Sort;
 use InvalidArgumentException;
 
+use function array_is_list;
 use function array_keys;
 use function array_map;
 use function Bentools\MeilisearchFilters\field;
@@ -19,20 +19,15 @@ use function is_array;
 use function is_object;
 use function is_scalar;
 
-use const PHP_INT_MAX;
-
 /**
  * @template T
  */
 final readonly class ObjectRepository
 {
-    public IdentityMap $identityMap;
-
     public function __construct(
         private ObjectManager $objectManager,
         private string $className,
     ) {
-        $this->identityMap = new IdentityMap();
     }
 
     /**
@@ -79,19 +74,14 @@ final readonly class ObjectRepository
      */
     public function find(string|int $id): ?object
     {
-        if ($this->identityMap->contains($id)) {
-            return $this->identityMap->get($id);
-        }
+        $identityMap = $this->objectManager->loadedObjects;
 
-        $metadata = $this->objectManager->classMetadataRegistry->getClassMetadata($this->className);
-        $filter = field($metadata->primaryKey)->equals($id);
+        return $identityMap->getObject($id, $this->className) ?? (function (string|int $id) {
+            $metadata = $this->objectManager->classMetadataRegistry->getClassMetadata($this->className);
+            $filter = field($metadata->primaryKey)->equals($id);
 
-        return $this->findOneBy($filter);
-    }
-
-    public function clear(): void
-    {
-        $this->identityMap->clear();
+            return $this->findOneBy($filter);
+        })($id);
     }
 
     /**
@@ -99,13 +89,14 @@ final readonly class ObjectRepository
      */
     private function convertDocumentToObject(array $document, ClassMetadata $metadata): object
     {
+        $identityMap = $this->objectManager->loadedObjects;
         $id = $this->objectManager->hydrater->getIdFromDocument($document, $metadata);
-        if ($this->identityMap->contains($id)) {
-            return $this->identityMap->get($id);
+        if ($identityMap->containsId($id, $this->className)) {
+            return $identityMap->getObject($id, $this->className);
         }
         $object = Reflection::class($this->className)->newLazyProxy(function () use ($document) {
             $instance = Reflection::class($this->className)->newInstanceWithoutConstructor();
-            $event = new PostLoadEvent($instance, $this);
+            $event = new PostLoadEvent($instance, $this->objectManager);
             $metadata = $this->objectManager->classMetadataRegistry->getClassMetadata($this->className);
             foreach ($metadata->listeners[PostLoadEvent::class] ?? [] as $listener) {
                 $listener->invoke($instance, [$event]);
@@ -114,8 +105,8 @@ final readonly class ObjectRepository
 
             return $this->objectManager->hydrater->hydrateObjectFromDocument($document, $instance);
         });
-        $this->identityMap->attach($id, $object);
-        $this->identityMap->rememberState($object, $document);
+        $identityMap->attach($object);
+        $identityMap->rememberState($object, $document);
 
         return $object;
     }

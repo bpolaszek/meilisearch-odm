@@ -2,7 +2,7 @@
 
 namespace BenTools\MeilisearchOdm\Event;
 
-use BenTools\MeilisearchOdm\Repository\ObjectRepository;
+use BenTools\MeilisearchOdm\Manager\ObjectManager;
 
 /**
  * @template T
@@ -14,7 +14,7 @@ final readonly class PreUpdateEvent
      */
     public function __construct(
         public object $object,
-        public ObjectRepository $repository,
+        public ObjectManager $objectManager,
     ) {
     }
 }

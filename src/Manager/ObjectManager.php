@@ -2,29 +2,37 @@
 
 namespace BenTools\MeilisearchOdm\Manager;
 
+use App\ApiResource\CustomerPointBalance;
+use BenTools\MeilisearchOdm\Attribute\AsMeiliDocument as ClassMetadata;
 use BenTools\MeilisearchOdm\Event\PrePersistEvent;
+use BenTools\MeilisearchOdm\Event\PreRemoveEvent;
 use BenTools\MeilisearchOdm\Event\PreUpdateEvent;
 use BenTools\MeilisearchOdm\Hydrater\Hydrater;
 use BenTools\MeilisearchOdm\Hydrater\PropertyTransformer\CoordinatesTransformer;
 use BenTools\MeilisearchOdm\Hydrater\PropertyTransformer\DateTimeTransformer;
+use BenTools\MeilisearchOdm\Hydrater\PropertyTransformer\ManyToOneRelationTransformer;
 use BenTools\MeilisearchOdm\Hydrater\PropertyTransformer\PropertyTransformerInterface;
 use BenTools\MeilisearchOdm\Hydrater\PropertyTransformer\StringableTransformer;
 use BenTools\MeilisearchOdm\Metadata\ClassMetadataRegistry;
+use BenTools\MeilisearchOdm\Misc\UniqueList;
 use BenTools\MeilisearchOdm\Repository\ObjectRepository;
 use Meilisearch\Client;
-use Meilisearch\Exceptions\TimeOutException;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\EventDispatcher\EventDispatcher;
 use Symfony\Component\OptionsResolver\OptionsResolver;
 use Symfony\Component\PropertyAccess\PropertyAccessor;
 use Symfony\Component\PropertyAccess\PropertyAccessorInterface;
+
 use WeakMap;
 
 use function array_column;
-use function array_shift;
+use function array_map;
 use function BenTools\IterableFunctions\iterable;
 use function BenTools\IterableFunctions\iterable_chunk;
 use function Bentools\MeilisearchFilters\field;
+use function BenTools\MeilisearchOdm\uniqueList;
+use function BenTools\MeilisearchOdm\weakmap_objects;
+use function BenTools\MeilisearchOdm\weakmap_values;
 use function is_array;
 
 final class ObjectManager
@@ -49,6 +57,8 @@ final class ObjectManager
 
     private bool $isFlushing = false;
     private array $pendingFlushTasks = [];
+    public readonly LoadedObjects $loadedObjects;
+    private(set) UnitOfWork $unitOfWork;
 
     /**
      * @param PropertyTransformerInterface[] $transformers
@@ -58,21 +68,31 @@ final class ObjectManager
         public readonly Client $meili = new Client('http://localhost:7700'),
         public readonly ClassMetadataRegistry $classMetadataRegistry = new ClassMetadataRegistry(),
         public readonly EventDispatcherInterface $eventDispatcher = new EventDispatcher(),
-        PropertyAccessorInterface $propertyAccessor = new PropertyAccessor(),
+        public readonly PropertyAccessorInterface $propertyAccessor = new PropertyAccessor(),
         array $transformers = [new DateTimeTransformer(), new StringableTransformer(), new CoordinatesTransformer()],
         array $options = [],
     ) {
         $this->hydrater = new Hydrater(
-            $this,
-            $propertyAccessor,
-            (fn (PropertyTransformerInterface ...$transformers) => $transformers)(...$transformers),
+            $this->classMetadataRegistry,
+            $this->propertyAccessor,
+            (fn (PropertyTransformerInterface ...$transformers) => $transformers)(
+                new ManyToOneRelationTransformer($this),
+                ...$transformers
+            ),
         );
+        $this->loadedObjects = new LoadedObjects($this->hydrater);
         $optionsResolver = new OptionsResolver();
         $optionsResolver->setDefaults(self::DEFAULT_OPTIONS);
         $optionsResolver->setAllowedTypes('flushBatchSize', ['int']);
         $optionsResolver->setAllowedTypes('flushTimeoutMs', ['int']);
         $optionsResolver->setAllowedTypes('flushCheckIntervalMs', ['int']);
         $this->options = $optionsResolver->resolve($options);
+        $this->unitOfWork = new UnitOfWork($this->loadedObjects);
+    }
+
+    public function getClassMetadata(string $className): ClassMetadata
+    {
+        return $this->classMetadataRegistry->getClassMetadata($className);
     }
 
     /**
@@ -109,143 +129,156 @@ final class ObjectManager
 
     public function persist(object $object, object ...$objects): void
     {
-        foreach ([$object, ...$objects] as $object) {
-            $repository = $this->getRepository($object::class);
-            $repository->identityMap->scheduleUpsert($object);
-        }
+        $this->unitOfWork->scheduleUpsert($object, ...$objects);
     }
 
     public function remove(object $object, object ...$objects): void
     {
-        foreach ([$object, ...$objects] as $object) {
-            $repository = $this->getRepository($object::class);
-            $repository->identityMap->scheduleDeletion($object);
-        }
+        $this->unitOfWork->scheduleDelete($object, ...$objects);
     }
 
     public function flush(): void
     {
-        // This is done in case `flush()` is called during an ongoing `flush()` (i.e. PrePersist event): 2nd flush will be queued
-        $this->pendingFlushTasks[] = [$this, 'doFlush'];
-        if (!$this->isFlushing) {
-            while ($task = array_shift($this->pendingFlushTasks)) {
-                $task();
-            }
+        if ($this->isFlushing) {
+            return; // Avoid recursive flush calls during event propagation
         }
-    }
 
-    /**
-     * @throws TimeOutException
-     */
-    private function doFlush(): void
-    {
         try {
             $this->isFlushing = true;
-            $tasks = [];
             $flushBatchSize = $this->options['flushBatchSize'];
-            $cachedDocuments = new WeakMap();
-            foreach ($this->repositories as $className => $repository) {
-                $metadata = $this->classMetadataRegistry->getClassMetadata($className);
+            $this->unitOfWork->computeChangesets();
 
-                // Compute changed entities
-                foreach ($repository->identityMap as $object) {
-                    $document = $this->hydrater->hydrateDocumentFromObject($object);
-                    $changeset = $this->hydrater->computeChangeset($object, $document);
-                    if ([] !== $changeset) {
-                        $repository->identityMap->scheduleUpsert($object);
-                        $cachedDocuments[$object] = $document; // Avoid normalizing the object twice
-                    }
-                }
+            CheckChangesetsAndFireEvents:
+            $hash = $this->unitOfWork->hash;
 
-                // Process upserts
-                if ($repository->identityMap->nbScheduledUpserts > 0) {
-                    $scheduledUpserts = $repository->identityMap->scheduledUpserts;
-                    foreach (self::getDocumentsByBatches($scheduledUpserts, $flushBatchSize) as $objects) {
-                        $tasks[] = $this->meili->index($metadata->indexUid)->updateDocuments(
-                            iterable($objects)
-                                ->map(function (object $object) use ($cachedDocuments, $repository) {
+            // Process Updates
+            $updateMetadata = new WeakMap();
+            $deleteMetadata = new WeakMap();
+            foreach ($this->unitOfWork->changesets as $object => $changeset) {
+                $metadata = $this->classMetadataRegistry->getClassMetadata($object::class);
+                $updateMetadata[$object] = $metadata;
+                $this->maybeFirePrePersistEvent($object);
+                $this->maybeFirePreUpdateEvent($object);
+            }
+            foreach ($this->unitOfWork->removals as $object) {
+                $metadata = $this->classMetadataRegistry->getClassMetadata($object::class);
+                $deleteMetadata[$object] = $metadata;
+                $this->maybeFirePreRemoveEvent($object);
+            }
 
-                                    if ($repository->identityMap->isScheduledForInsert($object)) {
-                                        $event = new PrePersistEvent($object, $repository);
-                                        $metadata = $this->classMetadataRegistry->getClassMetadata($object::class);
-                                        foreach ($metadata->listeners[PrePersistEvent::class] ?? [] as $listener) {
-                                            $listener->invoke($object, [$event]);
-                                        }
-                                        $this->eventDispatcher->dispatch($event);
-                                    } else  {
-                                        $event = new PreUpdateEvent($object, $repository);
-                                        $metadata = $this->classMetadataRegistry->getClassMetadata($object::class);
-                                        foreach ($metadata->listeners[PreUpdateEvent::class] ?? [] as $listener) {
-                                            $listener->invoke($object, [$event]);
-                                        }
-                                        $this->eventDispatcher->dispatch($event);
-                                    }
+            // Check if changesets have changed during events
+            $this->unitOfWork->computeChangesets();
+            if ($this->unitOfWork->hash !== $hash) {
+                goto CheckChangesetsAndFireEvents;
+            }
 
-                                    return $cachedDocuments[$object]
-                                        ?? $this->hydrater->hydrateDocumentFromObject($object);
-                                })
-                                ->asArray(),
-                        );
-                    }
-                }
+            $tasks = [];
+            foreach (uniqueList(weakmap_values($updateMetadata)) as $metadata) {
+                $documents = iterable(weakmap_objects($this->unitOfWork->changesets))
+                    ->filter(fn (object $object) => $updateMetadata[$object] === $metadata)
+                    ->map(fn (object $object) => $this->unitOfWork->changesets[$object]->newDocument)
+                ;
 
-                // Process deletions
-                if ($repository->identityMap->nbScheduledDeletions > 0) {
-                    $scheduledDeletions = $repository->identityMap->scheduledDeletions;
-                    foreach (self::getDocumentsByBatches($scheduledDeletions, $flushBatchSize) as $objects) {
-                        $tasks[] = $this->meili->index($metadata->indexUid)->deleteDocuments([
-                            'filter' => (string) field($metadata->primaryKey)->isIn(
-                                iterable($objects)
-                                    ->map(fn (object $object) => $this->hydrater->getIdFromObject($object))
-                                    ->asArray(),
-                            ),
-                        ]);
-                    }
+                foreach (self::getItemsByBatches($documents, $flushBatchSize) as $documents) {
+                    $docs = [...$documents];
+                    $tasks[] = $this->meili->index($metadata->indexUid)->updateDocuments($docs);
                 }
             }
+
+            // Process Deletions
+            foreach (uniqueList(weakmap_values($deleteMetadata)) as $metadata) {
+                $scheduledDeletions = iterable($this->unitOfWork->removals)
+                    ->filter(fn (object $object) => $deleteMetadata[$object] === $metadata)
+                ;
+                foreach (self::getItemsByBatches($scheduledDeletions, $flushBatchSize) as $objects) {
+                    $tasks[] = $this->meili->index($metadata->indexUid)->deleteDocuments([
+                        'filter' => (string) field($metadata->primaryKey)->isIn(
+                            iterable($objects)
+                                ->map(fn (object $object) => $this->hydrater->getIdFromObject($object))
+                                ->asArray(),
+                        ),
+                    ]);
+                }
+            }
+
             $this->meili->waitForTasks(
                 array_column($tasks, 'taskUid'),
                 $this->options['flushTimeoutMs'],
                 $this->options['flushCheckIntervalMs'],
             );
-            // Clear scheduled operations
-            foreach ($this->repositories as $repository) {
-                $repository->identityMap->scheduledUpserts = [];
-                $scheduledDeletions = $repository->identityMap->scheduledDeletions;
-                foreach (self::getDocumentsByBatches($scheduledDeletions, $flushBatchSize) as $objects) {
-                    foreach ($objects as $object) {
-                        $repository->identityMap->forgetState($object);
-                        $repository->identityMap->detach($object);
-                    }
-                }
-                $repository->identityMap->scheduledDeletions = [];
+
+            // Update identity map
+            foreach (weakmap_objects($this->unitOfWork->changesets) as $object) {
+                $this->loadedObjects->rememberState($object, $this->unitOfWork->changesets[$object]->newDocument);
             }
-            // Update states
-            foreach ($cachedDocuments as $object => $document) {
-                $this->getRepository($object::class)->identityMap->rememberState($object, $document);
-            }
+
+            // Clear unit of work
+            $this->unitOfWork = new UnitOfWork($this->loadedObjects);
         } finally {
             $this->isFlushing = false;
         }
     }
 
-    public function clear(): void
+    private function maybeFirePrePersistEvent(object $object): void
     {
-        foreach ($this->repositories as $repository) {
-            $repository->clear();
+        if (UnitOfWork::CREATE !== $this->unitOfWork->getPendingOperation($object)) {
+            return;
         }
+        if ($this->unitOfWork->hasFiredEvent($object, PrePersistEvent::class)) {
+            return;
+        }
+        $event = new PrePersistEvent($object, $this);
+        $metadata = $this->classMetadataRegistry->getClassMetadata($object::class);
+        foreach ($metadata->listeners[PrePersistEvent::class] ?? [] as $listener) {
+            $listener->invoke($object, [$event]);
+        }
+        $this->eventDispatcher->dispatch($event);
+        $this->unitOfWork->addFiredEvent($object, PrePersistEvent::class);
+    }
+
+    private function maybeFirePreUpdateEvent(object $object): void
+    {
+        if (UnitOfWork::UPDATE !== $this->unitOfWork->getPendingOperation($object)) {
+            return;
+        }
+        if ($this->unitOfWork->hasFiredEvent($object, PreUpdateEvent::class)) {
+            return;
+        }
+        $event = new PreUpdateEvent($object, $this);
+        $metadata = $this->classMetadataRegistry->getClassMetadata($object::class);
+        foreach ($metadata->listeners[PreUpdateEvent::class] ?? [] as $listener) {
+            $listener->invoke($object, [$event]);
+        }
+        $this->eventDispatcher->dispatch($event);
+        $this->unitOfWork->addFiredEvent($object, PreUpdateEvent::class);
+    }
+
+    private function maybeFirePreRemoveEvent(object $object): void
+    {
+        if (UnitOfWork::DELETE !== $this->unitOfWork->getPendingOperation($object)) {
+            return;
+        }
+        if ($this->unitOfWork->hasFiredEvent($object, PreRemoveEvent::class)) {
+            return;
+        }
+        $event = new PreRemoveEvent($object, $this);
+        $metadata = $this->classMetadataRegistry->getClassMetadata($object::class);
+        foreach ($metadata->listeners[PreRemoveEvent::class] ?? [] as $listener) {
+            $listener->invoke($object, [$event]);
+        }
+        $this->eventDispatcher->dispatch($event);
+        $this->unitOfWork->addFiredEvent($object, PreRemoveEvent::class);
     }
 
     /**
      * @return iterable<iterable<object>>
      */
-    private static function getDocumentsByBatches(iterable $documents, int $batchSize): iterable
+    private static function getItemsByBatches(iterable $items, int $batchSize): iterable
     {
         if (PHP_INT_MAX === $batchSize) {
-            return [$documents];
+            return [$items];
         }
 
-        return iterable_chunk($documents, $batchSize);
+        return iterable_chunk($items, $batchSize);
     }
 }
-

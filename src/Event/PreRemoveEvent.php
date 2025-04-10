@@ -7,7 +7,7 @@ use BenTools\MeilisearchOdm\Manager\ObjectManager;
 /**
  * @template T
  */
-final readonly class PostLoadEvent
+final readonly class PreRemoveEvent
 {
     /**
      * @param T $object
