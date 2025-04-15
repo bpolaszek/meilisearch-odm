@@ -19,7 +19,7 @@ class City
     #[AsMeiliAttribute]
     public string $name;
 
-    #[AsMeiliAttribute('country code', relation: new MeiliRelation(Country::class, MeiliRelationType::MANY_TO_ONE))]
+    #[AsMeiliAttribute('country code', relation: new MeiliRelation(MeiliRelationType::MANY_TO_ONE, Country::class))]
     public Country $country;
 
     #[AsMeiliAttribute]

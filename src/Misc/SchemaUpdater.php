@@ -35,14 +35,22 @@ final readonly class SchemaUpdater
                 })
                     ->map(fn (AsMeiliAttribute $attr) => $attr->attributeName ?? $attr->property->getName())
             ];
+            $shouldBeSortableAttributes = [
+                $metadata->primaryKey,
+                ...iterable(array_values($metadata->properties))
+                    ->filter(function (AsMeiliAttribute $attribute) {
+                    return true === $attribute->sortable;
+                })
+                    ->map(fn (AsMeiliAttribute $attr) => $attr->attributeName ?? $attr->property->getName())
+            ];
             $existingFilterableAttributes = $this->meili->index($metadata->indexUid)->getFilterableAttributes();
             $task = $this->meili->index($metadata->indexUid)->updateFilterableAttributes([
                 ...new Set($existingFilterableAttributes, $shouldBeFilterableAttributes),
             ]);
             $this->meili->waitForTask($task['taskUid']);
-            $sortableAttributes = $this->meili->index($metadata->indexUid)->getSortableAttributes();
+            $existingSortableAttributes = $this->meili->index($metadata->indexUid)->getSortableAttributes();
             $task = $this->meili->index($metadata->indexUid)->updateSortableAttributes([
-                ...new Set($sortableAttributes, [$metadata->primaryKey]),
+                ...new Set($existingSortableAttributes, $shouldBeSortableAttributes),
             ]);
             $this->meili->waitForTask($task['taskUid']);
             $onProgress($class, $metadata);

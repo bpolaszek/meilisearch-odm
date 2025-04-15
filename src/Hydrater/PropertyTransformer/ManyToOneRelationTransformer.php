@@ -22,7 +22,7 @@ final readonly class ManyToOneRelationTransformer implements PropertyTransformer
     {
         $targetClass = $metadata->relation->targetClass;
         $repository = $this->objectManager->getRepository($targetClass);
-        $attributeName = $metadata->relation->targetAttributeName
+        $attributeName = $metadata->relation->targetAttribute
             ?? $this->objectManager->getClassMetadata($targetClass)->primaryKey;
 
         return $repository->findOneBy([$attributeName => $value]);
@@ -30,7 +30,7 @@ final readonly class ManyToOneRelationTransformer implements PropertyTransformer
 
     public function toDocumentAttribute(mixed $value, AttributeMetadata $metadata): mixed
     {
-        $propertyPath = $metadata->relation->targetAttributeName
+        $propertyPath = $metadata->relation->targetAttribute
             ?? $this->objectManager->getClassMetadata($metadata->relation->targetClass)->idProperty;
 
         return $this->objectManager->propertyAccessor->getValue($value, $propertyPath);
