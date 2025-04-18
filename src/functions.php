@@ -3,6 +3,8 @@
 namespace BenTools\MeilisearchOdm;
 
 use BenTools\MeilisearchOdm\Misc\UniqueList;
+use Closure;
+use Stringable;
 use WeakMap;
 
 use function in_array;
@@ -46,4 +48,18 @@ function uniqueList(iterable $items = []): UniqueList
     }
 
     return $storage;
+}
+
+function throws(Closure $fn): bool
+{
+    try {
+        $fn();
+    } catch (\Throwable) {
+        return true;
+    }
+}
+
+function is_stringable(mixed $value): bool
+{
+    return is_string($value) || $value instanceof Stringable;
 }

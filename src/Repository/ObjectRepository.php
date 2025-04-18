@@ -15,6 +15,7 @@ use function array_is_list;
 use function array_keys;
 use function array_map;
 use function Bentools\MeilisearchFilters\field;
+use function BenTools\MeilisearchOdm\is_stringable;
 use function is_array;
 use function is_object;
 use function is_scalar;
@@ -123,8 +124,10 @@ final readonly class ObjectRepository
         if (!array_is_list($filters)) {
             $expressions = [];
             foreach ($filters as $field => $value) {
-                if (is_object($value)) {
+                if (is_object($value) && $this->objectManager->classMetadataRegistry->hasClassMetadata($value::class)) {
                     $value = $this->objectManager->hydrater->getIdFromObject($value);
+                } elseif (is_object($value) && is_stringable($value)) {
+                    $value = (string) $value;
                 }
                 if (!is_scalar($value) && !is_array($value)) {
                     throw new InvalidArgumentException("Filter value must be scalar or array");

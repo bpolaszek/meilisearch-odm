@@ -16,6 +16,7 @@ use ReflectionAttribute;
 use ReflectionClass;
 
 use function array_is_list;
+use function BenTools\MeilisearchOdm\throws;
 use function sprintf;
 
 final class ClassMetadataRegistry
@@ -44,6 +45,12 @@ final class ClassMetadataRegistry
     public function getClassMetadata(string $className): ClassMetadata
     {
         return $this->storage[$className] ??= $this->readClassMetadata($className);
+    }
+
+    public function hasClassMetadata(string $className): bool
+    {
+        return isset($this->storage[$className])
+            || !throws(fn () => $this->readClassMetadata($className));
     }
 
     private function readClassMetadata(string $className): ClassMetadata
