@@ -2,8 +2,10 @@
 
 namespace BenTools\MeilisearchOdm\Manager;
 
-use App\ApiResource\CustomerPointBalance;
 use BenTools\MeilisearchOdm\Attribute\AsMeiliDocument as ClassMetadata;
+use BenTools\MeilisearchOdm\Event\PostPersistEvent;
+use BenTools\MeilisearchOdm\Event\PostRemoveEvent;
+use BenTools\MeilisearchOdm\Event\PostUpdateEvent;
 use BenTools\MeilisearchOdm\Event\PrePersistEvent;
 use BenTools\MeilisearchOdm\Event\PreRemoveEvent;
 use BenTools\MeilisearchOdm\Event\PreUpdateEvent;
@@ -14,7 +16,6 @@ use BenTools\MeilisearchOdm\Hydrater\PropertyTransformer\ManyToOneRelationTransf
 use BenTools\MeilisearchOdm\Hydrater\PropertyTransformer\PropertyTransformerInterface;
 use BenTools\MeilisearchOdm\Hydrater\PropertyTransformer\StringableTransformer;
 use BenTools\MeilisearchOdm\Metadata\ClassMetadataRegistry;
-use BenTools\MeilisearchOdm\Misc\UniqueList;
 use BenTools\MeilisearchOdm\Repository\ObjectRepository;
 use Meilisearch\Client;
 use Psr\EventDispatcher\EventDispatcherInterface;
@@ -22,11 +23,9 @@ use Symfony\Component\EventDispatcher\EventDispatcher;
 use Symfony\Component\OptionsResolver\OptionsResolver;
 use Symfony\Component\PropertyAccess\PropertyAccessor;
 use Symfony\Component\PropertyAccess\PropertyAccessorInterface;
-
 use WeakMap;
 
 use function array_column;
-use function array_map;
 use function BenTools\IterableFunctions\iterable;
 use function BenTools\IterableFunctions\iterable_chunk;
 use function Bentools\MeilisearchFilters\field;
@@ -212,6 +211,9 @@ final class ObjectManager
                 $this->loadedObjects->rememberState($object, $this->unitOfWork->changesets[$object]->newDocument);
             }
 
+            // Fire post-flush events
+            $this->firePostFlushEvents();
+
             // Clear unit of work
             $this->unitOfWork = new UnitOfWork($this->loadedObjects);
         } finally {
@@ -268,6 +270,26 @@ final class ObjectManager
         }
         $this->eventDispatcher->dispatch($event);
         $this->unitOfWork->addFiredEvent($object, PreRemoveEvent::class);
+    }
+
+    private function firePostFlushEvents(): void
+    {
+        $map = [
+            PrePersistEvent::class => PostPersistEvent::class,
+            PreUpdateEvent::class => PostUpdateEvent::class,
+            PreRemoveEvent::class => PostRemoveEvent::class,
+        ];
+        foreach ($this->unitOfWork->firedEvents as $object => $events) {
+            foreach ($events as $eventClass) {
+                $targetEventClass = $map[$eventClass];
+                $event = new $targetEventClass($object, $this);
+                $metadata = $this->classMetadataRegistry->getClassMetadata($object::class);
+                foreach ($metadata->listeners[$event::class] ?? [] as $listener) {
+                    $listener->invoke($object, [$event]);
+                }
+                $this->eventDispatcher->dispatch($event);
+            }
+        }
     }
 
     /**
